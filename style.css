@@ -1,85 +1,52 @@
-* {
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
+/* =========================================================
+   자산뷰어 PWA - style.css
+   사소한 디자인 조정을 직접 하기 쉽도록 주요 값은 아래 :root 변수에 모음.
+   폰트 번호는 사용자가 만든 표 기준. (공통)은 여러 탭에서 같이 쓰는 스타일.
+========================================================= */
 
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-  background: #000;
-  color: #f7f7f7;
-  color-scheme: dark;
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    "Roboto",
-    "Noto Sans KR",
-    "Apple SD Gothic Neo",
-    "Malgun Gothic",
-    sans-serif;
-  font-variant-numeric: tabular-nums;
-}
+:root {
+  /* 기본 폰트: 이전에 기억해둔 안드로이드 스타일 시스템 폰트 */
+  --font-family-base: system-ui, -apple-system, BlinkMacSystemFont, "Roboto", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
 
-body {
-  padding: max(24px, env(safe-area-inset-top)) 20px calc(92px + env(safe-area-inset-bottom));
-}
+  /* 앱 전체 색상 */
+  --color-bg:#ffffff; --color-text:#111111; --color-muted:#888888; --color-line:#eeeeee;
+  --color-profit:#d72f45; --color-loss:#2f73d8;
+  --color-all:#838383; --color-blue:#4778c9; --color-orange:#f2a300; --color-cash:#14b866; --color-stock:#f2a300;
+  --box-radius:6px; --box-border:2px; --bottom-nav-height:78px;
 
-.app-shell {
-  min-height: 100vh;
+  /* FONT 01: 네비게이션바 - 탭 제목 일반 */ --font-01-size:13px; --font-01-weight:700; --font-01-color:#aaaaaa;
+  /* FONT 02: 네비게이션바 - 탭 제목 선택 */ --font-02-size:13px; --font-02-weight:900; --font-02-color:#111111;
+  /* FONT 03: 모든 탭 - 계좌이름 */ --font-03-size:18px; --font-03-weight:900; --font-03-color:#ffffff;
+  /* FONT 04: 상단박스 - TOTAL PORTFOLIO */ --font-04-size:15px; --font-04-weight:900; --font-04-color:#777777;
+  /* FONT 05 (공통): 자산금액 */ --font-05-size:31px; --font-05-weight:900; --font-05-color:#050505;
+  /* FONT 06 (공통): 원금금액 */ --font-06-size:14px; --font-06-weight:800; --font-06-color:#888888;
+  /* FONT 07 (공통): 박스-일간/평가/계좌 */ --font-07-size:15px; --font-07-weight:900;
+  /* FONT 11: 시세 - 주식이름 */ --font-11-size:18px; --font-11-weight:900; --font-11-color:#333333;
+  /* FONT 12: 시세 - 현재주가 */ --font-12-size:18px; --font-12-weight:900;
+  /* FONT 13: 시세 - 등락금액/등락율 */ --font-13-size:15px; --font-13-weight:600;
+  /* FONT 14: 시세 - 박스 평균가/수익율 */ --font-14-size:13px; --font-14-weight:600;
+  /* FONT 15 (공통): 박스 보유주식수 */ --font-15-size:13px; --font-15-weight:700;
+  /* FONT 21: 수익 - 등락금액/등락율 */ --font-21-size:15px; --font-21-weight:900;
+  /* FONT 22: 수익 - 주가스토리 */ --font-22-size:13px; --font-22-weight:500;
+  /* FONT 23: 수익 - 기간선택목록 */ --font-23-size:14px; --font-23-weight:900;
+  /* FONT 31: 자산 - 주식현금비중 */ --font-31-size:13px; --font-31-weight:600;
+  /* FONT 32: 자산 - 종목별자산금액 */ --font-32-size:20px; --font-32-weight:900;
+  /* FONT 33: 자산 - 등락금액/등락율 */ --font-33-size:14px; --font-33-weight:500;
+  /* FONT 41: 비중 - 계좌/종목명 */ --font-41-size:15px; --font-41-weight:800;
+  /* FONT 42: 비중 - 보유퍼센트 */ --font-42-size:14px; --font-42-weight:900;
+  /* FONT 51: 추이 - 월/연도 선택 */ --font-51-size:14px; --font-51-weight:900;
+  /* FONT 52: 추이 - 그래프 가로 날짜 */ --font-52-size:12px; --font-52-weight:700; --font-52-color:#aaaaaa;
+  /* FONT 53: 추이 - 그래프 세로 억/퍼센트 */ --font-53-size:12px; --font-53-weight:700; --font-53-color:#aaaaaa;
+  /* FONT 54: 추이 - 수익률 */ --font-54-size:21px; --font-54-weight:900;
+  /* FONT 55: 추이 - 터치 시 나타나는 날짜 */ --font-55-size:13px; --font-55-weight:800;
 }
-
-.hero {
-  padding-top: 48px;
-}
-
-.eyebrow {
-  color: #8d96a0;
-  font-size: 13px;
-  font-weight: 900;
-  letter-spacing: 0.08em;
-}
-
-h1 {
-  margin: 10px 0 8px;
-  font-size: 48px;
-  line-height: 1;
-  letter-spacing: -1.5px;
-}
-
-p {
-  margin: 0;
-  color: #aeb4bd;
-  font-size: 18px;
-  font-weight: 700;
-}
-
-.bottom-nav {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  height: calc(76px + env(safe-area-inset-bottom));
-  padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 4px;
-  background: #101115;
-  border-top: 1px solid #20242a;
-}
-
-.nav-btn {
-  border: 0;
-  border-radius: 14px;
-  background: transparent;
-  color: #8d96a0;
-  font: inherit;
-  font-size: 15px;
-  font-weight: 900;
-}
-
-.nav-btn.active {
-  color: #fff;
-  background: #1d2228;
-}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent} html,body{margin:0;min-height:100%;background:var(--color-bg);color:var(--color-text);font-family:var(--font-family-base);font-variant-numeric:tabular-nums;color-scheme:light} button{font-family:inherit}.app{max-width:760px;margin:0 auto;background:white;min-height:100vh}.screen{padding:calc(12px + env(safe-area-inset-top)) 14px calc(var(--bottom-nav-height) + 18px + env(safe-area-inset-bottom))}.loading{padding:40px 10px;color:var(--color-muted);font-weight:900}.profit{color:var(--color-profit)}.loss{color:var(--color-loss)}.muted{color:var(--color-muted)}
+/* 상단 TOTAL PORTFOLIO 박스 */.top-card,.weight-top-card,.trend-card{border:var(--box-border) solid var(--color-all);border-radius:var(--box-radius);padding:12px 18px;margin:4px 0 14px;background:white}.top-title{font-size:var(--font-04-size);font-weight:var(--font-04-weight);color:var(--font-04-color);letter-spacing:.04em;margin-bottom:7px}.top-body,.account-summary{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:start}.amount-main{font-size:var(--font-05-size);font-weight:var(--font-05-weight);color:var(--font-05-color);letter-spacing:-.8px;line-height:1.05;white-space:nowrap}.principal{margin-top:8px;font-size:var(--font-06-size);font-weight:var(--font-06-weight);color:var(--font-06-color)}.tag{display:inline-block;background:#eee;border-radius:4px;padding:2px 6px;margin-right:5px;font-size:12px;font-weight:800}.summary-list{min-width:172px;display:grid;gap:4px}.summary-row{display:grid;grid-template-columns:1fr auto;gap:7px;align-items:center;font-size:var(--font-07-size);font-weight:var(--font-07-weight);text-align:right;white-space:nowrap}.summary-row .label{background:#eee;color:#222;border-radius:4px;padding:1px 5px;font-size:12px;font-weight:800}
+/* 계좌 박스 공통 */.account-section{position:relative;margin:14px 0 16px;padding-top:34px;--account-color:var(--color-all)}.account-section.blue{--account-color:var(--color-blue)}.account-section.orange{--account-color:var(--color-orange)}.account-tab{position:absolute;top:0;left:0;width:min(230px,70%);height:34px;display:flex;align-items:center;padding:0 16px;background:var(--account-color);color:var(--font-03-color);font-size:var(--font-03-size);font-weight:var(--font-03-weight)}.account-box{border:var(--box-border) solid var(--account-color);padding:14px 18px;background:white}
+/* 시세 탭 */.quote-row{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(104px,.8fr) minmax(90px,.55fr);gap:8px;align-items:center;padding:10px 0;border-bottom:1px solid var(--color-line)}.quote-row:last-child,.profit-row:last-child,.asset-row:last-child{border-bottom:0}.stock-name{font-size:var(--font-11-size);font-weight:var(--font-11-weight);color:var(--font-11-color);line-height:1.25;word-break:keep-all}.quote-price{text-align:right}.current-price{font-size:var(--font-12-size);font-weight:var(--font-12-weight);white-space:nowrap}.day-change{margin-top:4px;font-size:var(--font-13-size);font-weight:var(--font-13-weight);white-space:nowrap}.side-pills{display:grid;gap:5px}.info-pill{display:block;width:100%;padding:3px 6px;border-radius:4px;background:#d9d9d9;text-align:right;font-size:var(--font-15-size);font-weight:var(--font-15-weight);white-space:nowrap}.avg-profit{background:#f8d2d2;color:var(--color-profit)}.avg-loss{background:#d5e7f6;color:var(--color-loss)}
+/* 수익 탭 */.period-tabs,.trend-periods{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;padding:4px 0 12px}.period-btn,.trend-period-btn{border:0;border-radius:999px;background:transparent;color:#111;font-size:var(--font-23-size);font-weight:var(--font-23-weight);padding:7px 0}.period-btn.active,.trend-period-btn.active{background:#f20e22;color:#fff}.profit-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:12px 0;border-bottom:1px solid var(--color-line)}.profit-value{text-align:right;font-size:var(--font-21-size);font-weight:var(--font-21-weight);white-space:nowrap}.price-story{margin-top:8px;font-size:var(--font-22-size);font-weight:var(--font-22-weight);white-space:nowrap;color:#333}
+/* 자산 탭 */.account-summary{padding-bottom:12px;border-bottom:1px solid var(--color-line)}.asset-mix{padding:13px 0 12px;border-bottom:1px solid var(--color-line)}.mix-legend{display:flex;justify-content:space-between;gap:12px;margin-bottom:7px;font-size:var(--font-31-size);font-weight:var(--font-31-weight)}.legend-dot{display:inline-block;width:8px;height:8px;margin-right:6px}.mix-stock{color:var(--color-stock)}.mix-cash{color:var(--color-cash)}.mix-bar{display:flex;overflow:hidden;height:10px;border-radius:999px;background:#eee}.mix-bar .stock{background:var(--color-stock)}.mix-bar .cash{background:var(--color-cash)}.asset-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(125px,auto) minmax(80px,auto);gap:8px;align-items:center;padding:12px 0;border-bottom:1px solid var(--color-line)}.asset-value{text-align:right}.asset-amount{font-size:var(--font-32-size);font-weight:var(--font-32-weight);white-space:nowrap}.asset-profit{margin-top:5px;font-size:var(--font-33-size);font-weight:var(--font-33-weight);white-space:nowrap}
+/* 비중 탭 */.stacked-bar{display:flex;overflow:hidden;height:15px;border-radius:999px;margin:16px 0 14px;background:#eee}.weight-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px 20px}.weight-item{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:8px;align-items:center;font-size:var(--font-41-size);font-weight:var(--font-41-weight)}.weight-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.weight-rate{font-size:var(--font-42-size);font-weight:var(--font-42-weight);white-space:nowrap}.dot{width:11px;height:11px;border-radius:50%;background:var(--dot)}.donut-layout{display:grid;grid-template-columns:190px minmax(0,1fr);gap:18px;align-items:center}.donut{width:170px;height:170px;border-radius:50%;background:conic-gradient(#ddd 0 100%);position:relative;margin:0 auto}.donut:after{content:"";position:absolute;inset:36px;border-radius:50%;background:#fff}
+/* 추이 탭 */.trend-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;margin-bottom:8px}.chart-wrap{position:relative;height:220px;margin-top:8px;border-bottom:1px solid #eee;touch-action:none}.chart-svg{width:100%;height:100%;display:block}.axis-label{position:absolute;right:0;font-size:var(--font-53-size);font-weight:var(--font-53-weight);color:var(--font-53-color)}.axis-label.top{top:10px}.axis-label.bottom{bottom:8px}.profit-rate-title{margin-top:28px;font-size:var(--font-54-size);font-weight:var(--font-54-weight)}
+/* 하단 네비게이션 */.bottom-nav{position:fixed;left:0;right:0;bottom:0;height:calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));padding:5px 6px calc(6px + env(safe-area-inset-bottom));display:grid;grid-template-columns:repeat(6,1fr);gap:2px;background:#fff;border-top:1px solid #ddd;z-index:50}.nav-item{border:0;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--font-01-color);font-size:var(--font-01-size);font-weight:var(--font-01-weight)}.nav-item.active{color:var(--font-02-color);font-size:var(--font-02-size);font-weight:var(--font-02-weight)}.nav-icon{width:28px;height:28px;object-fit:contain}.nav-item:active{transform:scale(.96)}
+@media(max-width:430px){:root{--font-05-size:29px;--font-11-size:17px;--font-32-size:18px}.screen{padding-left:10px;padding-right:10px}.top-body,.account-summary{grid-template-columns:1fr}.quote-row{grid-template-columns:minmax(0,1fr) minmax(96px,auto) minmax(76px,auto);gap:6px}.donut-layout{grid-template-columns:150px minmax(0,1fr)}.donut{width:138px;height:138px}.donut:after{inset:29px}}
