@@ -1,5 +1,5 @@
 {
-  "apiUrl": "https://script.google.com/macros/s/여기에_AppsScript_웹앱_URL/exec",
-  "token": "여기에_VIEWER_TOKEN",
+  "apiUrl": "https://script.google.com/macros/s/AKfycbzIlA8QmYBx10A-gURo_C2Vxs84HNtu6cyRqmysVGdtl7Ar3iIL-q55zfP6_afjjOaBgQ/exec",
+  "token": "my-stock-viewer-1234",
   "smallWeightThreshold": 0.01
 }
