@@ -49,6 +49,14 @@
     </nav>
   </div>
 
-  <script src="./app.js"></script>
+ // <script src="./app.js"></script>
+
+  <link rel="stylesheet" href="./style.css?v=dev">
+  
+  <script>
+    const script = document.createElement("script");
+    script.src = "./app.js?v=" + Date.now();
+    document.body.appendChild(script);
+  </script>
 </body>
 </html>
