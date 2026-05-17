@@ -149,8 +149,11 @@ async function loadDashboard(force = false) {
       url.searchParams.set("action", "dashboard");
       if (CONFIG.token) url.searchParams.set("token", CONFIG.token);
 
-      const res = await fetch(url.toString(), { cache: "no-store" });
-      const data = await res.json();
+      /*
+        GitHub Pages → Apps Script 호출은 CORS에 막힐 수 있으므로
+        fetch() 대신 JSONP 방식으로 dashboardData를 받아옵니다.
+      */
+      const data = await loadJsonp(url.toString());
 
       if (data.ok === false) throw new Error(data.error || "API 오류");
       state.data = data;
@@ -163,6 +166,59 @@ async function loadDashboard(force = false) {
   } catch (err) {
     renderError(err.message || String(err));
   }
+}
+
+/**
+ * Apps Script JSONP 호출 함수.
+ *
+ * fetch()는 CORS 때문에 실패할 수 있어서,
+ * <script src="...&callback=..."> 방식으로 데이터를 받습니다.
+ */
+function loadJsonp(url) {
+  return new Promise((resolve, reject) => {
+    const callbackName =
+      "__stockviewer_cb_" +
+      Date.now() +
+      "_" +
+      Math.floor(Math.random() * 1000000);
+
+    let script;
+
+    const cleanup = () => {
+      try {
+        delete window[callbackName];
+      } catch (_) {
+        window[callbackName] = undefined;
+      }
+
+      if (script && script.parentNode) {
+        script.parentNode.removeChild(script);
+      }
+    };
+
+    window[callbackName] = data => {
+      cleanup();
+      resolve(data);
+    };
+
+    script = document.createElement("script");
+
+    const sep = url.includes("?") ? "&" : "?";
+    script.src =
+      url +
+      sep +
+      "callback=" +
+      encodeURIComponent(callbackName) +
+      "&_=" +
+      Date.now();
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error("JSONP 호출 실패"));
+    };
+
+    document.body.appendChild(script);
+  });
 }
 
 function renderLoading(msg) {
