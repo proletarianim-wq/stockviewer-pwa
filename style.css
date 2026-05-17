@@ -103,7 +103,7 @@
   /* FONT 05 (공통): 자산금액 */
   --font-05-size: 20px;
   --font-05-weight: 900;
-  --font-05-color: #050505;
+  --font-05-color: #858585; /*#050505;*/
   --font-05-letter-spacing: -0.8px;
 
   /* FONT 06 (공통): 원금금액 */
@@ -717,7 +717,7 @@ button { font-family: inherit; }
   :root {
     --screen-padding-x: 10px;
     --box-padding-x: 14px;
-    --font-05-size: 20px;
+    --font-05-size: 29px;
     --font-11-size: 17px;
     --font-12-size: 17px;
     --font-32-size: 18px;
