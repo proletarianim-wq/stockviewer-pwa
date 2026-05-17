@@ -6,8 +6,8 @@
 ========================================================= */
 
 const CONFIG = {
-  apiUrl: "",
-  token: "",
+  apiUrl: "https://script.google.com/macros/s/AKfycbyORtqrFLx8x9H2unObBcgWCdbSmUskVtdsAoJzWktslaPPQZoMeFMNx24d4zceNIfc8w/exec",
+  token: "my-stock-viewer-1234",
   smallWeightThreshold: 0.01
 };
 
