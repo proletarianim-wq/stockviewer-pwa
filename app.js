@@ -81,7 +81,7 @@ function cash(account, symbol, name, currency, quantity, fxRate) {
 
 document.addEventListener("DOMContentLoaded", () => {
   setupNav();
-  registerServiceWorker();
+  // registerServiceWorker();
   loadDashboard();
 });
 
