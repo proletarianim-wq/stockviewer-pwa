@@ -1,36 +1,696 @@
-/* 자산뷰어 PWA - app.js
-   API 주소가 비어 있으면 MOCK_DATA로 표시한다. 나중에 Apps Script doGet JSON API 주소를 CONFIG.apiUrl에 넣으면 된다. */
-const CONFIG={apiUrl:"",token:"",smallWeightThreshold:.01};
-const NAV_ICONS={quote:{off:"./assets/icons/nav/quote-off.png",on:"./assets/icons/nav/quote-on.png"},profit:{off:"./assets/icons/nav/profit-off.png",on:"./assets/icons/nav/profit-on.png"},asset:{off:"./assets/icons/nav/asset-off.png",on:"./assets/icons/nav/asset-on.png"},weight:{off:"./assets/icons/nav/weight-off.png",on:"./assets/icons/nav/weight-on.png"},trend:{off:"./assets/icons/nav/trend-off.png",on:"./assets/icons/nav/trend-on.png"},refresh:{off:"./assets/icons/nav/refresh-off.png",on:"./assets/icons/nav/refresh-on.png"}};
-const state={activeTab:"asset",profitPeriod:"month",trendPeriod:"month",data:null,touchedTrendPoint:null};
-const PERIODS=[['year','올해'],['month','이달'],['oneMonth','한달'],['sixMonths','6달'],['oneYear','1년'],['threeYears','3년'],['max','최대']];
-const MOCK_DATA={totalBasis:420000000,accountBasisMap:{"색시-안세공연저":220000000,"신랑-ISA":100000000},accounts:[{account:"색시-안세공연저",colorKey:"blue"},{account:"신랑-ISA",colorKey:"orange"}],holdings:[
-{account:"색시-안세공연저",symbol:"KODEX001",name:"KODEX 금융고배당TOP 10타겟위클리커버드콜",currency:"KRW",avgPrice:35000,currentPrice:46750,quantity:3500,principal:122500000,principalKrw:122500000,valueKrw:163625000,profit:41125000,profitRate:.3357,dayChangeAmount:750,dayChangeRate:.043},
-{account:"색시-안세공연저",symbol:"QLD",name:"QLD",currency:"USD",avgPrice:350.18,currentPrice:546.71,quantity:250,principal:87545,principalKrw:122563000,valueKrw:191348500,profit:68785500,profitRate:.5612,dayChangeAmount:-7.46,dayChangeRate:-.017},
-{account:"색시-안세공연저",symbol:"SKHYNIX",name:"SK하이닉스",currency:"KRW",avgPrice:1421430,currentPrice:1119000,quantity:125,principal:177678750,principalKrw:177678750,valueKrw:139875000,profit:-37803750,profitRate:-.2128,dayChangeAmount:-123000,dayChangeRate:-.143},
-{account:"신랑-ISA",symbol:"KODEX001",name:"KODEX 금융고배당TOP 10타겟위클리커버드콜",currency:"KRW",avgPrice:39000,currentPrice:46750,quantity:1200,principal:46800000,principalKrw:46800000,valueKrw:56100000,profit:9300000,profitRate:.1987,dayChangeAmount:750,dayChangeRate:.043},
-{account:"신랑-ISA",symbol:"SKHYNIX",name:"SK하이닉스",currency:"KRW",avgPrice:1421430,currentPrice:1119000,quantity:125,principal:177678750,principalKrw:177678750,valueKrw:139875000,profit:-37803750,profitRate:-.2128,dayChangeAmount:-123000,dayChangeRate:-.143},
-{account:"색시-안세공연저",symbol:"CASH_USD",name:"달러 예수금",currency:"USD",avgPrice:1,currentPrice:1474.5,quantity:12000,principal:12000,principalKrw:17694000,valueKrw:17694000,profit:0,profitRate:0,dayChangeAmount:0,dayChangeRate:0},
-{account:"신랑-ISA",symbol:"CASH_KRW",name:"예수금",currency:"KRW",avgPrice:1,currentPrice:1,quantity:180000000,principal:180000000,principalKrw:180000000,valueKrw:180000000,profit:0,profitRate:0,dayChangeAmount:0,dayChangeRate:0}],snapshots:makeMockSnapshots()};
-function won(v){return Math.round(Number(v||0)).toLocaleString('ko-KR')+'원'} function wonSign(v){let n=Math.round(Number(v||0));return(n>=0?'+':'-')+Math.abs(n).toLocaleString('ko-KR')+'원'} function rate(v,plus=true){let n=Number(v||0),t=(n*100).toFixed(1)+'%';return plus&&n>=0?'+'+t:t} function plainRate(v){return(Number(v||0)*100).toFixed(1)+'%'} function price(v,c){let n=Number(v||0);return c==='USD'?'$ '+n.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):Math.round(n).toLocaleString('ko-KR')} function change(v,c){let n=Number(v||0),s=n>=0?'+':'-',a=Math.abs(n);return c==='USD'?s+a.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):s+Math.round(a).toLocaleString('ko-KR')} function qty(v,s){let n=Number(v||0);if(s==='CASH_USD')return '$ '+Math.round(n).toLocaleString('en-US');if(isCash(s))return Math.round(n).toLocaleString('ko-KR')+'원';return n.toLocaleString('ko-KR')+' 주'} function esc(t){return String(t??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
-function isCash(s){return String(s||'').startsWith('CASH_')} function holdings(){return(state.data?.holdings||[]).filter(i=>Math.abs(Number(i.quantity||0))>.000001)} function accounts(){let s=new Set;(state.data?.accounts||[]).forEach(a=>a.account&&s.add(a.account));holdings().forEach(i=>i.account&&i.account!=='전체계좌'&&s.add(i.account));return[...s]} function meta(a,i=0){if(a==='전체계좌')return{account:a,colorKey:'all'};return(state.data?.accounts||[]).find(x=>x.account===a)||{account:a,colorKey:i%2?'blue':'orange'}} function accClass(a,i=0){let k=meta(a,i).colorKey;return k==='blue'?'blue':k==='orange'?'orange':''}
-function itemsFor(a){let h=holdings();return a==='전체계좌'?aggregate(h):h.filter(i=>i.account===a)}
-function aggregate(items){let m=new Map;items.forEach(it=>{let k=it.symbol;if(!m.has(k))m.set(k,{...it,account:'전체계좌',quantity:0,valueKrw:0,principal:0,principalKrw:0,profit:0});let t=m.get(k);t.quantity+=Number(it.quantity||0);t.valueKrw+=Number(it.valueKrw||0);t.principal+=Number(it.principal||0);t.principalKrw+=Number(it.principalKrw||0);t.profit+=Number(it.profit||0);t.currentPrice=Number(it.currentPrice||t.currentPrice||0);t.dayChangeAmount=Number(it.dayChangeAmount||t.dayChangeAmount||0);t.dayChangeRate=Number(it.dayChangeRate||t.dayChangeRate||0)});return[...m.values()].map(it=>{if(!isCash(it.symbol)&&it.quantity)it.avgPrice=it.principal/it.quantity;it.profitRate=it.principalKrw?it.profit/it.principalKrw:0;return it})}
-function sortItems(a){return[...a].sort((x,y)=>{let xc=isCash(x.symbol),yc=isCash(y.symbol);if(xc&&!yc)return 1;if(!xc&&yc)return-1;return Number(y.valueKrw||0)-Number(x.valueKrw||0)})} function invests(a){return sortItems(a).filter(i=>!isCash(i.symbol))} function cashes(a){return sortItems(a).filter(i=>isCash(i.symbol))}
-function summary(a='전체계좌'){let it=itemsFor(a),total=it.reduce((s,x)=>s+Number(x.valueKrw||0),0),basis=a==='전체계좌'?Number(state.data?.totalBasis||0):Number(state.data?.accountBasisMap?.[a]||0),principalKrw=it.reduce((s,x)=>s+Number(x.principalKrw||0),0),day=dayProfit(it);return{total,principal:basis,accountProfit:total-basis,accountProfitRate:basis?(total-basis)/basis:0,evalProfit:total-principalKrw,evalProfitRate:principalKrw?(total-principalKrw)/principalKrw:0,dayProfit:day.amount,dayProfitRate:day.rate}}
-function dayProfit(items){let amount=0,prevValue=0;items.forEach(i=>{if(isCash(i.symbol))return;let r=Number(i.dayChangeRate||0),v=Number(i.valueKrw||0);if(r<=-.99)return;let p=v/(1+r);amount+=v-p;prevValue+=p});return{amount,rate:prevValue?amount/prevValue:0}}
-document.addEventListener('DOMContentLoaded',()=>{setupNav();registerServiceWorker();loadDashboard()}); async function registerServiceWorker(){if('serviceWorker'in navigator)try{await navigator.serviceWorker.register('./service-worker.js')}catch(e){console.warn(e)}}
-function setupNav(){document.querySelectorAll('.nav-item[data-tab]').forEach(b=>b.onclick=()=>{state.activeTab=b.dataset.tab;state.touchedTrendPoint=null;render()});document.querySelector('[data-action="refresh"]').onclick=()=>loadDashboard(true);updateNav()} function updateNav(){document.querySelectorAll('.nav-icon').forEach(img=>{let k=img.dataset.icon,on=k===state.activeTab;img.src=NAV_ICONS[k]?.[on?'on':'off']||''});document.querySelectorAll('.nav-item[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===state.activeTab))}
-async function loadDashboard(force=false){document.getElementById('screen').innerHTML='<div class="loading">'+(force?'갱신 중...':'자산뷰어를 불러오는 중...')+'</div>';try{if(CONFIG.apiUrl){let u=new URL(CONFIG.apiUrl);if(CONFIG.token)u.searchParams.set('token',CONFIG.token);let r=await fetch(u,{cache:'no-store'});state.data=await r.json()}else{await new Promise(r=>setTimeout(r,250));state.data=JSON.parse(JSON.stringify(MOCK_DATA))}render()}catch(e){document.getElementById('screen').innerHTML='<div class="loading loss">오류: '+esc(e.message||e)+'</div>'}}
-function topCard(){let s=summary('전체계좌');return `<section class="top-card"><div class="top-title">TOTAL PORTFOLIO</div><div class="top-body"><div><div class="amount-main">${won(s.total)}</div><div class="principal"><span class="tag">원금</span>${won(s.principal)}</div></div>${summaryList(s)}</div></section>`} function summaryList(s){return `<div class="summary-list">${sumRow(s.dayProfit,s.dayProfitRate,'일간')}${sumRow(s.evalProfit,s.evalProfitRate,'평가')}${sumRow(s.accountProfit,s.accountProfitRate,'계좌')}</div>`} function sumRow(a,r,l){let c=a>=0?'profit':'loss';return `<div class="summary-row ${c}"><span>${wonSign(a)} (${rate(r)})</span><span class="label">${l}</span></div>`}
-function section(a,html,i=0){return `<section class="account-section ${accClass(a,i)}"><div class="account-tab">${esc(a)}</div><div class="account-box">${html}</div></section>`} function allSections(renderer){return [section('전체계좌',renderer('전체계좌',0),0),...accounts().map((a,i)=>section(a,renderer(a,i+1),i+1))].join('')}
-function render(){if(!state.data)return;updateNav();let s=document.getElementById('screen');if(state.activeTab==='quote')s.innerHTML=topCard()+quoteTab();if(state.activeTab==='profit'){s.innerHTML=topCard()+profitTab();attachProfit()}if(state.activeTab==='asset')s.innerHTML=assetTab();if(state.activeTab==='weight')s.innerHTML=weightTab();if(state.activeTab==='trend'){s.innerHTML=trendTab();attachTrend()}}
-function quoteTab(){return allSections(a=>{let arr=invests(itemsFor(a));return arr.length?arr.map(quoteRow).join(''):'<div class="muted">표시할 시세 데이터가 없습니다.</div>'})} function quoteRow(i){let ch=i.dayChangeRate>=0?'profit':'loss',avg=i.profitRate>=0?'avg-profit':'avg-loss';return `<div class="quote-row"><div class="stock-name">${esc(i.name||i.symbol)}</div><div class="quote-price"><div class="current-price">${price(i.currentPrice,i.currency)}</div><div class="day-change ${ch}">${change(i.dayChangeAmount,i.currency)} (${rate(i.dayChangeRate)})</div></div><div class="side-pills"><span class="info-pill ${avg}">${price(i.avgPrice,i.currency).replace('$ ','')}(${rate(i.profitRate,false)}) 평</span><span class="info-pill">${qty(i.quantity,i.symbol)}</span></div></div>`}
-function periodTabs(){return `<div class="period-tabs">${PERIODS.map(([k,l])=>`<button class="period-btn ${k===state.profitPeriod?'active':''}" data-period="${k}">${l}</button>`).join('')}</div>`} function profitTab(){return allSections(a=>periodTabs()+invests(itemsFor(a)).map(i=>profitRow(i)).join(''))} function profitRow(i){let r=periodReturn(i,state.profitPeriod),c=r.profitAmount>=0?'profit':'loss';return `<div class="profit-row"><div class="stock-name">${esc(i.name||i.symbol)}</div><div><div class="profit-value ${c}">${wonSign(r.profitAmount)} (${rate(r.profitRate)})</div><div class="price-story">(${r.baseDateLabel}) ${price(r.basePrice,i.currency)} → ${price(i.currentPrice,i.currency)}</div></div></div>`} function attachProfit(){document.querySelectorAll('.period-btn').forEach(b=>b.onclick=()=>{state.profitPeriod=b.dataset.period;render()})}
-function periodReturn(i,k){let d=i.periodReturns?.[k]||i.returnPeriods?.[k]||i.periods?.[k];if(d)return{baseDateLabel:d.actualBaseDate||d.baseDate||d.date||periodDate(k),basePrice:Number(d.basePrice||d.price||i.avgPrice||0),profitAmount:Number(d.profitAmount||d.profit||0),profitRate:Number(d.profitRate||d.rate||0)};return{baseDateLabel:periodDate(k),basePrice:Number(i.avgPrice||0),profitAmount:Number(i.profit||0),profitRate:Number(i.profitRate||0)}} function periodDate(k){let d=new Date(),y=d.getFullYear();if(k==='year')return String(y).slice(2)+'/01/01';if(k==='month')return String(y).slice(2)+'/'+pad(d.getMonth()+1)+'/01';if(k==='oneMonth')d.setMonth(d.getMonth()-1);if(k==='sixMonths')d.setMonth(d.getMonth()-6);if(k==='oneYear')d.setFullYear(y-1);if(k==='threeYears')d.setFullYear(y-3);if(k==='max')return '최대';return String(d.getFullYear()).slice(2)+'/'+pad(d.getMonth()+1)+'/'+pad(d.getDate())} function pad(n){return String(n).padStart(2,'0')}
-function assetTab(){return allSections(a=>{let sm=summary(a),it=itemsFor(a),inv=invests(it),ca=cashes(it),iv=inv.reduce((s,x)=>s+x.valueKrw,0),cv=ca.reduce((s,x)=>s+x.valueKrw,0),tot=iv+cv,sr=tot?iv/tot:0,cr=tot?cv/tot:0;return `<div class="account-summary"><div><div class="amount-main">${won(sm.total)}</div><div class="principal"><span class="tag">원금</span>${won(sm.principal)}</div></div>${summaryList(sm)}</div><div class="asset-mix"><div class="mix-legend"><span class="mix-stock"><i class="legend-dot" style="background:currentColor"></i>주식 ${won(iv)} (${plainRate(sr)})</span><span class="mix-cash"><i class="legend-dot" style="background:currentColor"></i>예수금 ${won(cv)} (${plainRate(cr)})</span></div><div class="mix-bar"><div class="stock" style="width:${sr*100}%"></div><div class="cash" style="width:${cr*100}%"></div></div></div>${[...inv,...ca].map(assetRow).join('')}`})} function assetRow(i){let c=i.profit>=0?'profit':'loss',cash=isCash(i.symbol);return `<div class="asset-row"><div class="stock-name">${esc(name(i))}</div><div class="asset-value"><div class="asset-amount">${won(i.valueKrw)}</div><div class="asset-profit ${cash?'muted':c}">${cash?qty(i.quantity,i.symbol):wonSign(i.profit)+' ('+rate(i.profitRate)+')'}</div></div><div class="side-pills"><span class="info-pill">${cash?'현금':qty(i.quantity,i.symbol)}</span></div></div>`} function name(i){return i.symbol==='CASH_KRW'?'예수금':i.symbol==='CASH_USD'?'달러 예수금':i.name||i.symbol}
-function weightTab(){let all=summary('전체계좌'),aws=accounts().map((a,i)=>{let sm=summary(a);return{name:a,value:sm.total,weight:all.total?sm.total/all.total:0,color:accColor(a,i+1)}});return `<section class="weight-top-card"><div class="top-title">TOTAL PORTFOLIO</div><div class="amount-main">${won(all.total)}</div>${stacked(aws)}${weightGrid(aws)}</section>`+allSections(a=>donutLayout(groupSmall(itemsFor(a).filter(x=>x.valueKrw>0))))} function accColor(a,i){let k=meta(a,i).colorKey;return k==='blue'?'var(--color-blue)':k==='orange'?'var(--color-orange)':'var(--color-all)'} function stacked(items){return `<div class="stacked-bar">${items.map(x=>`<div style="width:${x.weight*100}%;background:${x.color}"></div>`).join('')}</div>`} function weightGrid(items){return `<div class="weight-grid">${items.map(x=>`<div class="weight-item"><span class="dot" style="--dot:${x.color}"></span><span class="weight-name">${esc(x.name)}</span><span class="weight-rate">${plainRate(x.weight)}</span></div>`).join('')}</div>`} function groupSmall(items){let total=items.reduce((s,x)=>s+x.valueKrw,0),big=[],small=[];items.forEach(x=>(x.valueKrw/total<CONFIG.smallWeightThreshold?small:big).push(x));if(small.length)big.push({symbol:'ETC',name:'기타 '+small.length+'종목',valueKrw:small.reduce((s,x)=>s+x.valueKrw,0)});return big} function donutLayout(items){let total=items.reduce((s,x)=>s+x.valueKrw,0);if(!total)return'<div class="muted">표시할 비중 데이터가 없습니다.</div>';let arr=items.map((x,i)=>({...x,weight:x.valueKrw/total,color:chartColor(i)})).sort((a,b)=>b.valueKrw-a.valueKrw);return `<div class="donut-layout"><div class="donut" style="background:${conic(arr)}"></div><div>${arr.map(x=>`<div class="weight-item"><span class="dot" style="--dot:${x.color}"></span><span class="weight-name">${esc(name(x))}</span><span class="weight-rate">${plainRate(x.weight)}</span></div>`).join('')}</div></div>`} function chartColor(i){return ['#3e75cf','#8d63e6','#19b96b','#e916d7','#0c7f78','#8a7900','#47bde8','#9e9e9e'][i%8]} function conic(a){let c=0;return 'conic-gradient('+a.map(x=>{let s=c,e=c+x.weight*100;c=e;return `${x.color} ${s}% ${e}%`}).join(',')+')'}
-function trendTab(){let sm=summary('전체계좌'),sn=state.data?.snapshots||[],sel=state.touchedTrendPoint||sn[sn.length-1]||{};return `<section class="trend-card"><div class="trend-head"><div class="amount-main">${won(sel.totalAsset??sm.total)}</div><div class="principal">${won(sel.principal??sm.principal)} <span class="tag">원금</span></div></div><div class="trend-periods">${PERIODS.map(([k,l])=>`<button class="trend-period-btn ${k===state.trendPeriod?'active':''}" data-trend="${k}">${l}</button>`).join('')}</div><div class="chart-wrap" id="assetChart">${lineChart(sn,sel)}<div class="axis-label top">5.4억</div><div class="axis-label bottom">0원</div></div><div class="profit-rate-title">수익률</div><div class="trend-periods"><button class="trend-period-btn active">월별</button><button class="trend-period-btn">일별</button><button class="trend-period-btn">연도별</button><button class="trend-period-btn">&lt;</button><button class="trend-period-btn">2026년</button><button class="trend-period-btn">&gt;</button></div><div class="muted" style="padding:30px 0 48px;text-align:center">수익률 그래프는 SnapshotSummary 연결 후 표시</div></section>`+section('색시-안세공연저','<div class="muted" style="min-height:130px">계좌별 추이 영역</div>',1)}
-function lineChart(points,sel){if(!points.length)return'<svg class="chart-svg"></svg>';let w=600,h=220,px=34,py=20,max=Math.max(...points.map(p=>p.totalAsset))*1.05,xy=points.map((p,i)=>({...p,x:px+i/Math.max(1,points.length-1)*(w-px*2),y:h-py-(p.totalAsset/max)*(h-py*2)})),line=xy.map((p,i)=>(i?'L':'M')+` ${p.x} ${p.y}`).join(' '),idx=Math.max(0,points.findIndex(p=>p.date===sel.date));if(idx<0)idx=points.length-1;let sp=xy[idx];return `<svg class="chart-svg" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none"><line x1="${px}" y1="${py}" x2="${w-px}" y2="${py}" stroke="#eee" stroke-dasharray="5 5"/><line x1="${px}" y1="${h-py}" x2="${w-px}" y2="${h-py}" stroke="#eee"/><path d="${line}" fill="none" stroke="#f24a73" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/><line x1="${sp.x}" y1="${py}" x2="${sp.x}" y2="${h-py}" stroke="#ccd1d7" stroke-width="2"/><circle cx="${sp.x}" cy="${sp.y}" r="6" fill="#f24a73"/></svg>`}
-function attachTrend(){document.querySelectorAll('[data-trend]').forEach(b=>b.onclick=()=>{state.trendPeriod=b.dataset.trend;render()});let c=document.getElementById('assetChart');if(!c)return;c.onpointerdown=e=>{c.setPointerCapture?.(e.pointerId);chartTouch(e)};c.onpointermove=e=>{if(e.buttons||e.pressure>0)chartTouch(e)};c.onpointerup=()=>{state.touchedTrendPoint=null;render()};c.onpointercancel=()=>{state.touchedTrendPoint=null;render()}} function chartTouch(e){let sn=state.data?.snapshots||[],r=e.currentTarget.getBoundingClientRect(),x=e.clientX-r.left,idx=Math.round(Math.max(0,Math.min(1,x/r.width))*(sn.length-1));state.touchedTrendPoint=sn[idx];render()}
-function makeMockSnapshots(){let a=[],d0=new Date('2026-05-01'),total=480000000,principal=420000000;for(let i=0;i<18;i++){let d=new Date(d0);d.setDate(d0.getDate()+i);total+=(i%4===0?8500000:2400000)-(i%7===0?3500000:0);a.push({date:d.toISOString().slice(0,10),totalAsset:total,principal,profit:total-principal,profitRate:(total-principal)/principal})}return a}
+/* =========================================================
+   자산뷰어 PWA - app.js
+
+   CONFIG.apiUrl에 Apps Script Web App 주소를 넣으면 실제 데이터 사용.
+   비워두면 MOCK_DATA로 화면 확인.
+========================================================= */
+
+const CONFIG = {
+  apiUrl: "",
+  token: "",
+  smallWeightThreshold: 0.01
+};
+
+const NAV_ICONS = {
+  quote: { off: "./assets/icons/nav/quote-off.png", on: "./assets/icons/nav/quote-on.png" },
+  asset: { off: "./assets/icons/nav/asset-off.png", on: "./assets/icons/nav/asset-on.png" },
+  weight: { off: "./assets/icons/nav/weight-off.png", on: "./assets/icons/nav/weight-on.png" },
+  trend: { off: "./assets/icons/nav/trend-off.png", on: "./assets/icons/nav/trend-on.png" },
+  refresh: { off: "./assets/icons/nav/refresh-off.png", on: "./assets/icons/nav/refresh-on.png" }
+};
+
+const state = {
+  activeTab: "quote",
+  trendPeriod: "month",
+  data: null,
+  touchedTrendPoint: null
+};
+
+const TREND_PERIODS = [
+  { key: "year", label: "올해" },
+  { key: "month", label: "이달" },
+  { key: "oneMonth", label: "한달" },
+  { key: "sixMonths", label: "6달" },
+  { key: "oneYear", label: "1년" },
+  { key: "max", label: "최대" }
+];
+
+const MOCK_DATA = {
+  totalBasis: 420000000,
+  accountBasisMap: {
+    "색시-세공연저": 10000000,
+    "색시-안세공연저": 120000000,
+    "신랑-ISA": 20000000,
+    "신랑-일반1": 20000000,
+    "신랑-일반2": 50000000
+  },
+  accounts: [
+    { account: "색시-세공연저", colorKey: "blue" },
+    { account: "색시-안세공연저", colorKey: "blue" },
+    { account: "신랑-ISA", colorKey: "orange" },
+    { account: "신랑-일반1", colorKey: "orange" },
+    { account: "신랑-일반2", colorKey: "orange" }
+  ],
+  holdings: [
+    h("색시-세공연저", "QLD", "ProShares Ultra QQQ", "AMS", "미국ETF", "USD", 62, 1000, 546.71, -7.46, -0.017, 1400),
+    cash("색시-세공연저", "CASH_KRW", "원화 현금", "KRW", 1350000, 1),
+    cash("색시-세공연저", "CASH_USD", "달러 현금", "USD", 550, 1400),
+    h("색시-안세공연저", "426030", "TIME 미국나스닥100액티브", "KRX", "국내ETF", "KRW", 32000, 5000, 46750, 750, 0.043, 1),
+    h("신랑-ISA", "000660", "SK하이닉스", "KRX", "국내주식", "KRW", 1300000, 10, 1119000, -123000, -0.143, 1),
+    h("신랑-ISA", "VOO", "Vanguard 500 Index Fund", "AMS", "미국ETF", "USD", 600, 10, 490, 4.1, 0.008, 1400),
+    h("신랑-ISA", "005930", "삼성전자", "KRX", "국내주식", "KRW", 200000, 10, 82000, 1000, 0.012, 1),
+    h("신랑-일반1", "000250", "삼천당제약", "KRX", "국내주식", "KRW", 150000, 10, 175000, 3000, 0.017, 1),
+    cash("신랑-일반1", "CASH_USD", "달러 현금", "USD", 10000, 1400),
+    h("신랑-일반2", "457790", "PLUS 태양광&ESS", "KRX", "국내ETF", "KRW", 55000, 1000, 44700, -400, -0.009, 1),
+    h("신랑-일반2", "426030", "TIME 미국나스닥100액티브", "KRX", "국내ETF", "KRW", 34000, 20, 46750, 750, 0.043, 1)
+  ],
+  snapshots: makeMockSnapshots()
+};
+
+function h(account, symbol, name, exchange, assetType, currency, avgPrice, quantity, currentPrice, dayChangeAmount, dayChangeRate, fxRate) {
+  const principal = avgPrice * quantity;
+  const principalKrw = principal * fxRate;
+  const valueKrw = currentPrice * quantity * fxRate;
+  const profit = valueKrw - principalKrw;
+  return { account, symbol, name, exchange, assetType, currency, avgPrice, quantity, currentPrice, dayChangeAmount, dayChangeRate, fxRate, valueKrw, principal, principalKrw, profit, profitRate: principalKrw ? profit / principalKrw : 0 };
+}
+
+function cash(account, symbol, name, currency, quantity, fxRate) {
+  return { account, symbol, name, exchange: "CASH", assetType: "현금", currency, avgPrice: 1, quantity, currentPrice: 1, dayChangeAmount: 0, dayChangeRate: 0, fxRate, valueKrw: quantity * fxRate, principal: quantity, principalKrw: quantity * fxRate, profit: 0, profitRate: 0 };
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  setupNav();
+  registerServiceWorker();
+  loadDashboard();
+});
+
+async function registerServiceWorker() {
+  if (!("serviceWorker" in navigator)) return;
+  try { await navigator.serviceWorker.register("./service-worker.js"); } catch (e) { console.warn(e); }
+}
+
+function setupNav() {
+  document.querySelectorAll(".nav-item[data-tab]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.activeTab = btn.dataset.tab;
+      state.touchedTrendPoint = null;
+      render();
+    });
+  });
+
+  document.querySelector(".nav-refresh").addEventListener("click", () => loadDashboard(true));
+  updateNav();
+}
+
+async function loadDashboard(force = false) {
+  renderLoading(force ? "갱신 중..." : "자산뷰어를 불러오는 중...");
+
+  try {
+    if (CONFIG.apiUrl) {
+      const url = new URL(CONFIG.apiUrl);
+      url.searchParams.set("action", "dashboard");
+      if (CONFIG.token) url.searchParams.set("token", CONFIG.token);
+
+      const res = await fetch(url.toString(), { cache: "no-store" });
+      const data = await res.json();
+
+      if (data.ok === false) throw new Error(data.error || "API 오류");
+      state.data = data;
+    } else {
+      await wait(250);
+      state.data = clone(MOCK_DATA);
+    }
+
+    render();
+  } catch (err) {
+    renderError(err.message || String(err));
+  }
+}
+
+function renderLoading(msg) {
+  document.getElementById("screen").innerHTML = `<div class="loading-screen">${escapeHtml(msg)}</div>`;
+  updateNav();
+}
+
+function renderError(msg) {
+  document.getElementById("screen").innerHTML = `<div class="loading-screen loss">오류: ${escapeHtml(msg)}</div>`;
+  updateNav();
+}
+
+function render() {
+  if (!state.data) return;
+  updateNav();
+
+  const screen = document.getElementById("screen");
+  if (state.activeTab === "quote") screen.innerHTML = renderTopCard() + renderQuoteTab();
+  if (state.activeTab === "asset") screen.innerHTML = renderAssetTab();
+  if (state.activeTab === "weight") screen.innerHTML = renderWeightTab();
+  if (state.activeTab === "trend") {
+    screen.innerHTML = renderTrendTab();
+    attachTrendEvents();
+  }
+}
+
+function updateNav() {
+  document.querySelectorAll(".nav-icon").forEach(img => {
+    const key = img.dataset.icon;
+    const active = key === state.activeTab;
+    img.src = NAV_ICONS[key]?.[active ? "on" : "off"] || "";
+  });
+
+  document.querySelectorAll(".nav-item[data-tab]").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === state.activeTab);
+  });
+}
+
+/* =========================================================
+   Data helpers
+========================================================= */
+
+function holdings() {
+  return (state.data?.holdings || []).filter(x => Math.abs(Number(x.quantity || 0)) > 0.000001);
+}
+
+function accountNames() {
+  const names = [];
+  (state.data?.accounts || []).forEach(a => {
+    if (a.account && !names.includes(a.account)) names.push(a.account);
+  });
+  holdings().forEach(h => {
+    if (h.account && !names.includes(h.account)) names.push(h.account);
+  });
+  return names;
+}
+
+function itemsFor(account) {
+  if (account === "전체계좌") return aggregateBySymbol(holdings());
+  return holdings().filter(h => h.account === account);
+}
+
+function aggregateBySymbol(items) {
+  const map = {};
+  items.forEach(i => {
+    if (!map[i.symbol]) {
+      map[i.symbol] = { ...i, account: "전체계좌", quantity: 0, valueKrw: 0, principal: 0, principalKrw: 0, profit: 0 };
+    }
+    map[i.symbol].quantity += Number(i.quantity || 0);
+    map[i.symbol].valueKrw += Number(i.valueKrw || 0);
+    map[i.symbol].principal += Number(i.principal || 0);
+    map[i.symbol].principalKrw += Number(i.principalKrw || 0);
+    map[i.symbol].profit += Number(i.profit || 0);
+  });
+
+  return Object.values(map).map(i => {
+    if (!isCash(i.symbol) && i.quantity) i.avgPrice = i.principal / i.quantity;
+    i.profitRate = i.principalKrw ? i.profit / i.principalKrw : 0;
+    return i;
+  });
+}
+
+function summary(account = "전체계좌") {
+  const items = itemsFor(account);
+  const total = sum(items, "valueKrw");
+  const principalKrw = sum(items, "principalKrw");
+  const evalProfit = total - principalKrw;
+  const basis = account === "전체계좌" ? Number(state.data?.totalBasis || 0) : Number(state.data?.accountBasisMap?.[account] || 0);
+  const day = dayProfit(items);
+
+  return {
+    total,
+    principalKrw,
+    evalProfit,
+    evalProfitRate: principalKrw ? evalProfit / principalKrw : 0,
+    basis,
+    accountProfit: total - basis,
+    accountProfitRate: basis ? (total - basis) / basis : 0,
+    dayProfit: day.amount,
+    dayProfitRate: day.rate
+  };
+}
+
+function dayProfit(items) {
+  let amount = 0, prevValue = 0;
+  items.forEach(i => {
+    if (isCash(i.symbol)) return;
+    const r = Number(i.dayChangeRate || 0);
+    const value = Number(i.valueKrw || 0);
+    if (r <= -0.99) return;
+    const prev = value / (1 + r);
+    amount += value - prev;
+    prevValue += prev;
+  });
+  return { amount, rate: prevValue ? amount / prevValue : 0 };
+}
+
+function sorted(items) {
+  return [...items].sort((a, b) => {
+    if (isCash(a.symbol) && !isCash(b.symbol)) return 1;
+    if (!isCash(a.symbol) && isCash(b.symbol)) return -1;
+    return Number(b.valueKrw || 0) - Number(a.valueKrw || 0);
+  });
+}
+
+function investments(items) { return sorted(items).filter(i => !isCash(i.symbol)); }
+function cashItems(items) { return sorted(items).filter(i => isCash(i.symbol)); }
+function isCash(symbol) { return String(symbol || "").startsWith("CASH_"); }
+function sum(items, key) { return items.reduce((s, i) => s + Number(i[key] || 0), 0); }
+
+/* =========================================================
+   Common components
+========================================================= */
+
+function renderTopCard() {
+  const s = summary("전체계좌");
+  return `
+    <section class="top-card">
+      <div class="top-card-title">TOTAL PORTFOLIO</div>
+      <div class="top-card-body">
+        <div>
+          <div class="amount-main">${formatWon(s.total)}</div>
+          <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+        </div>
+        ${renderProfitList(s)}
+      </div>
+    </section>
+  `;
+}
+
+function renderProfitList(s) {
+  return `
+    <div class="summary-profit-list">
+      ${profitRow(s.dayProfit, s.dayProfitRate, "일간")}
+      ${profitRow(s.evalProfit, s.evalProfitRate, "평가")}
+      ${profitRow(s.accountProfit, s.accountProfitRate, "계좌")}
+    </div>
+  `;
+}
+
+function profitRow(amount, rate, label) {
+  const cls = Number(amount) >= 0 ? "profit" : "loss";
+  return `<div class="summary-profit-row ${cls}"><span>${formatWonSign(amount)} (${formatRate(rate)})</span><span class="label">${label}</span></div>`;
+}
+
+function renderAccountSection(account, html, index = 0) {
+  return `
+    <section class="account-section ${accountClass(account, index)}">
+      <div class="account-tab">${escapeHtml(account)}</div>
+      <div class="account-box">${html}</div>
+    </section>
+  `;
+}
+
+function renderAllSections(renderer) {
+  const arr = [renderAccountSection("전체계좌", renderer("전체계좌", 0), 0)];
+  accountNames().forEach((a, i) => arr.push(renderAccountSection(a, renderer(a, i + 1), i + 1)));
+  return arr.join("");
+}
+
+function accountClass(account, i = 0) {
+  if (account === "전체계좌") return "is-all";
+  if (String(account).includes("색시")) return "is-blue";
+  if (String(account).includes("신랑")) return "is-orange";
+  return i % 2 ? "is-blue" : "is-orange";
+}
+
+/* =========================================================
+   Quote tab
+========================================================= */
+
+function renderQuoteTab() {
+  return renderAllSections(account => {
+    const items = investments(itemsFor(account));
+    if (!items.length) return `<div class="muted">표시할 시세 데이터가 없습니다.</div>`;
+    return items.map(renderQuoteRow).join("");
+  });
+}
+
+function renderQuoteRow(i) {
+  const c = Number(i.dayChangeRate || 0) >= 0 ? "profit" : "loss";
+  const avgC = Number(i.profitRate || 0) >= 0 ? "avg-profit" : "avg-loss";
+
+  return `
+    <div class="quote-row">
+      <div class="stock-name">${escapeHtml(i.name || i.symbol)}</div>
+      <div class="quote-price">
+        <div class="current-price">${formatPrice(i.currentPrice, i.currency)}</div>
+        <div class="day-change ${c}">${formatChange(i.dayChangeAmount, i.currency)} (${formatRate(i.dayChangeRate)})</div>
+      </div>
+      <div class="side-pills">
+        <span class="info-pill ${avgC}">${formatPrice(i.avgPrice, i.currency).replace("$ ", "")}(${formatRate(i.profitRate, false)}) <span class="small-tag">평</span></span>
+        <span class="info-pill">${formatQty(i.quantity, i.symbol)}</span>
+      </div>
+    </div>
+  `;
+}
+
+/* =========================================================
+   Asset tab
+========================================================= */
+
+function renderAssetTab() {
+  return renderAllSections(account => {
+    const s = summary(account);
+    const items = itemsFor(account);
+    const inv = investments(items);
+    const cash = cashItems(items);
+    const invValue = sum(inv, "valueKrw");
+    const cashValue = sum(cash, "valueKrw");
+    const total = invValue + cashValue;
+    const invRate = total ? invValue / total : 0;
+    const cashRate = total ? cashValue / total : 0;
+
+    return `
+      <div class="account-summary">
+        <div>
+          <div class="amount-main">${formatWon(s.total)}</div>
+          <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+        </div>
+        ${renderProfitList(s)}
+      </div>
+
+      <div class="asset-mix">
+        <div class="mix-legend">
+          <span class="mix-stock"><i class="legend-dot"></i>주식 ${formatWon(invValue)} (${formatPlainRate(invRate)})</span>
+          <span class="mix-cash"><i class="legend-dot"></i>예수금 ${formatWon(cashValue)} (${formatPlainRate(cashRate)})</span>
+        </div>
+        <div class="mix-bar">
+          <div class="stock" style="width:${invRate * 100}%"></div>
+          <div class="cash" style="width:${cashRate * 100}%"></div>
+        </div>
+      </div>
+
+      ${inv.map(renderAssetRow).join("")}
+      ${cash.map(renderAssetRow).join("")}
+    `;
+  });
+}
+
+function renderAssetRow(i) {
+  const isC = isCash(i.symbol);
+  const cls = Number(i.profit || 0) >= 0 ? "profit" : "loss";
+
+  return `
+    <div class="asset-row">
+      <div class="stock-name">${escapeHtml(displayName(i))}</div>
+      <div class="asset-value">
+        <div class="asset-amount">${formatWon(i.valueKrw)}</div>
+        <div class="asset-profit ${isC ? "muted" : cls}">
+          ${isC ? formatQty(i.quantity, i.symbol) : `${formatWonSign(i.profit)} (${formatRate(i.profitRate)})`}
+        </div>
+      </div>
+      <div class="side-pills">
+        <span class="info-pill">${isC ? "현금" : formatQty(i.quantity, i.symbol)}</span>
+      </div>
+    </div>
+  `;
+}
+
+/* =========================================================
+   Weight tab
+========================================================= */
+
+function renderWeightTab() {
+  const total = summary("전체계좌").total;
+
+  const accItems = accountNames().map((name, idx) => {
+    const v = summary(name).total;
+    return { name, valueKrw: v, weight: total ? v / total : 0, color: accountColor(name, idx + 1) };
+  });
+
+  return `
+    <section class="weight-top-card">
+      <div class="top-card-title">TOTAL PORTFOLIO</div>
+      <div class="amount-main">${formatWon(total)}</div>
+      ${renderStackedBar(accItems)}
+      ${renderWeightGrid(accItems)}
+    </section>
+
+    ${renderAllSections(account => renderDonutLayout(groupSmall(itemsFor(account).filter(i => Number(i.valueKrw || 0) > 0))))}
+  `;
+}
+
+function renderStackedBar(items) {
+  return `<div class="stacked-bar">${items.map(i => `<div class="stacked-segment" style="width:${i.weight * 100}%;background:${i.color};"></div>`).join("")}</div>`;
+}
+
+function renderWeightGrid(items) {
+  return `<div class="weight-grid">${items.map(i => weightLine(i.name, i.weight, i.color)).join("")}</div>`;
+}
+
+function weightLine(name, rate, color) {
+  return `
+    <div class="weight-item">
+      <span class="color-dot" style="--dot-color:${color};"></span>
+      <span class="weight-name">${escapeHtml(name)}</span>
+      <span class="weight-rate">${formatPlainRate(rate)}</span>
+    </div>
+  `;
+}
+
+function renderDonutLayout(items) {
+  const total = sum(items, "valueKrw");
+  if (!items.length || !total) return `<div class="muted">표시할 비중 데이터가 없습니다.</div>`;
+
+  const list = sorted(items).map((i, idx) => ({ ...i, weight: Number(i.valueKrw || 0) / total, color: chartColor(idx) }));
+
+  return `
+    <div class="donut-layout">
+      <div class="donut" style="background:${conic(list)}"></div>
+      <div>${list.map(i => weightLine(displayName(i), i.weight, i.color)).join("")}</div>
+    </div>
+  `;
+}
+
+function groupSmall(items) {
+  const total = sum(items, "valueKrw");
+  if (!total) return items;
+
+  const big = [];
+  const small = [];
+
+  items.forEach(i => {
+    const w = Number(i.valueKrw || 0) / total;
+    if (w < CONFIG.smallWeightThreshold) small.push(i);
+    else big.push(i);
+  });
+
+  if (small.length) {
+    big.push({
+      symbol: "ETC",
+      name: `기타 ${small.length}종목`,
+      valueKrw: sum(small, "valueKrw"),
+      currency: "KRW",
+      assetType: "기타"
+    });
+  }
+
+  return big;
+}
+
+/* =========================================================
+   Trend tab
+========================================================= */
+
+function renderTrendTab() {
+  const s = summary("전체계좌");
+  const points = state.data?.snapshots || [];
+  const selected = state.touchedTrendPoint || points[points.length - 1] || {
+    date: "",
+    totalAsset: s.total,
+    principal: s.basis,
+    profit: s.accountProfit,
+    profitRate: s.accountProfitRate
+  };
+
+  return `
+    <section class="trend-card">
+      <div class="trend-head">
+        <div class="amount-main">${formatWon(selected.totalAsset)}</div>
+        <div class="principal-line">${formatWon(selected.principal)} <span class="pill-label">원금</span></div>
+      </div>
+
+      <div class="trend-periods">
+        ${TREND_PERIODS.map(p => `<button class="trend-period-btn ${p.key === state.trendPeriod ? "active" : ""}" data-trend-period="${p.key}" type="button">${p.label}</button>`).join("")}
+      </div>
+
+      <div class="chart-wrap" id="assetChart">
+        ${renderLineChart(points, selected)}
+        <div class="chart-axis-label top">자산</div>
+        <div class="chart-axis-label bottom">0원</div>
+      </div>
+
+      <div class="profit-rate-title">수익률</div>
+      <div class="muted" style="padding:30px 0 48px;text-align:center;">
+        SnapshotSummary가 쌓이면 수익률 그래프를 표시합니다.
+      </div>
+    </section>
+  `;
+}
+
+function attachTrendEvents() {
+  document.querySelectorAll("[data-trend-period]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      state.trendPeriod = btn.dataset.trendPeriod;
+      render();
+    });
+  });
+
+  const chart = document.getElementById("assetChart");
+  if (!chart) return;
+
+  chart.addEventListener("pointerdown", e => {
+    chart.setPointerCapture?.(e.pointerId);
+    handleChartPointer(e);
+  });
+
+  chart.addEventListener("pointermove", e => {
+    if (e.buttons || e.pressure > 0) handleChartPointer(e);
+  });
+
+  chart.addEventListener("pointerup", () => {
+    state.touchedTrendPoint = null;
+    render();
+  });
+
+  chart.addEventListener("pointercancel", () => {
+    state.touchedTrendPoint = null;
+    render();
+  });
+}
+
+function handleChartPointer(e) {
+  const points = state.data?.snapshots || [];
+  if (!points.length) return;
+
+  const rect = e.currentTarget.getBoundingClientRect();
+  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+  const idx = Math.round(ratio * (points.length - 1));
+  state.touchedTrendPoint = points[idx];
+  render();
+}
+
+function renderLineChart(points, selected) {
+  if (!points.length) return `<svg class="chart-svg"></svg>`;
+
+  const width = 600, height = 220, padX = 34, padY = 20;
+  const max = Math.max(...points.map(p => Number(p.totalAsset || 0))) * 1.05;
+  const min = 0;
+
+  const xy = points.map((p, i) => {
+    const x = padX + (i / Math.max(1, points.length - 1)) * (width - padX * 2);
+    const y = height - padY - ((Number(p.totalAsset || 0) - min) / Math.max(1, max - min)) * (height - padY * 2);
+    return { ...p, x, y };
+  });
+
+  const assetLine = xy.map((p, i) => `${i ? "L" : "M"} ${p.x} ${p.y}`).join(" ");
+  const principalLine = xy.map((p, i) => {
+    const y = height - padY - ((Number(p.principal || 0) - min) / Math.max(1, max - min)) * (height - padY * 2);
+    return `${i ? "L" : "M"} ${p.x} ${y}`;
+  }).join(" ");
+
+  const idx = selected ? Math.max(0, points.findIndex(p => p.date === selected.date)) : points.length - 1;
+  const sp = xy[idx >= 0 ? idx : points.length - 1];
+
+  return `
+    <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+      <line x1="${padX}" y1="${padY}" x2="${width - padX}" y2="${padY}" stroke="#eee" stroke-dasharray="5 5"/>
+      <line x1="${padX}" y1="${height - padY}" x2="${width - padX}" y2="${height - padY}" stroke="#eee"/>
+      <path d="${principalLine}" fill="none" stroke="#d7dce1" stroke-width="3" stroke-dasharray="4 4"/>
+      <path d="${assetLine}" fill="none" stroke="#f24a73" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+      ${sp ? `<line x1="${sp.x}" y1="${padY}" x2="${sp.x}" y2="${height - padY}" stroke="#ccd1d7" stroke-width="2"/><circle cx="${sp.x}" cy="${sp.y}" r="6" fill="#f24a73"/>` : ""}
+    </svg>
+  `;
+}
+
+/* =========================================================
+   Formatters / utilities
+========================================================= */
+
+function formatWon(v) { return Math.round(Number(v || 0)).toLocaleString("ko-KR") + "원"; }
+function formatWonSign(v) { const n = Math.round(Number(v || 0)); return (n >= 0 ? "+" : "-") + Math.abs(n).toLocaleString("ko-KR") + "원"; }
+function formatRate(v, plus = true) { const n = Number(v || 0); const t = (n * 100).toFixed(1) + "%"; return plus && n >= 0 ? "+" + t : t; }
+function formatPlainRate(v) { return (Number(v || 0) * 100).toFixed(1) + "%"; }
+
+function formatPrice(v, currency) {
+  const n = Number(v || 0);
+  if (currency === "USD") return "$ " + n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return Math.round(n).toLocaleString("ko-KR");
+}
+
+function formatChange(v, currency) {
+  const n = Number(v || 0);
+  const sign = n >= 0 ? "+" : "-";
+  const abs = Math.abs(n);
+  if (currency === "USD") return sign + abs.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return sign + Math.round(abs).toLocaleString("ko-KR");
+}
+
+function formatQty(v, symbol) {
+  const n = Number(v || 0);
+  if (symbol === "CASH_USD") return "$ " + Math.round(n).toLocaleString("en-US");
+  if (isCash(symbol)) return Math.round(n).toLocaleString("ko-KR") + "원";
+  return n.toLocaleString("ko-KR") + " 주";
+}
+
+function displayName(i) {
+  if (i.symbol === "CASH_KRW") return "원화 현금";
+  if (i.symbol === "CASH_USD") return "달러 현금";
+  return i.name || i.symbol;
+}
+
+function accountColor(name, i) {
+  if (String(name).includes("색시")) return "var(--color-account-blue)";
+  if (String(name).includes("신랑")) return "var(--color-account-orange)";
+  return "var(--color-account-all)";
+}
+
+function chartColor(i) {
+  const arr = ["var(--chart-01)", "var(--chart-02)", "var(--chart-03)", "var(--chart-04)", "var(--chart-05)", "var(--chart-06)", "var(--chart-07)", "var(--chart-08)"];
+  return arr[i % arr.length];
+}
+
+function conic(items) {
+  let cur = 0;
+  const parts = items.map(i => {
+    const start = cur;
+    const end = cur + i.weight * 100;
+    cur = end;
+    return `${i.color} ${start}% ${end}%`;
+  });
+  return `conic-gradient(${parts.join(", ")})`;
+}
+
+function escapeHtml(t) {
+  return String(t ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
+function clone(v) { return typeof structuredClone === "function" ? structuredClone(v) : JSON.parse(JSON.stringify(v)); }
+
+function makeMockSnapshots() {
+  const arr = [];
+  const start = new Date("2026-05-01");
+  let total = 480000000;
+  const principal = 420000000;
+
+  for (let i = 0; i < 18; i++) {
+    const d = new Date(start);
+    d.setDate(start.getDate() + i);
+    total += (i % 4 === 0 ? 8500000 : 2400000) - (i % 7 === 0 ? 3500000 : 0);
+    arr.push({
+      date: d.toISOString().slice(0, 10),
+      totalAsset: total,
+      principal,
+      profit: total - principal,
+      profitRate: principal ? (total - principal) / principal : 0
+    });
+  }
+
+  return arr;
+}

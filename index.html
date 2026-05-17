@@ -3,24 +3,52 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+  <!-- 흰색 계열 앱: 상태표시줄/브라우저 테마 -->
   <meta name="theme-color" content="#ffffff">
   <meta name="color-scheme" content="light">
+
   <title>자산뷰어</title>
+
   <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="./style.css">
 </head>
+
 <body>
-  <div class="app">
-    <main id="screen" class="screen"><div class="loading">자산뷰어를 불러오는 중...</div></main>
+  <div id="app" class="app">
+    <main id="screen" class="screen">
+      <div class="loading-screen">자산뷰어를 불러오는 중...</div>
+    </main>
+
     <nav class="bottom-nav" aria-label="하단 메뉴">
-      <button class="nav-item" data-tab="quote"><img class="nav-icon" data-icon="quote" alt=""><span>시세</span></button>
-      <button class="nav-item" data-tab="profit"><img class="nav-icon" data-icon="profit" alt=""><span>수익</span></button>
-      <button class="nav-item" data-tab="asset"><img class="nav-icon" data-icon="asset" alt=""><span>자산</span></button>
-      <button class="nav-item" data-tab="weight"><img class="nav-icon" data-icon="weight" alt=""><span>비중</span></button>
-      <button class="nav-item" data-tab="trend"><img class="nav-icon" data-icon="trend" alt=""><span>추이</span></button>
-      <button class="nav-item" data-action="refresh"><img class="nav-icon" data-icon="refresh" alt=""><span>갱신</span></button>
+      <button class="nav-item" data-tab="quote" type="button">
+        <img class="nav-icon" alt="" data-icon="quote">
+        <span class="nav-label">시세</span>
+      </button>
+
+      <button class="nav-item" data-tab="asset" type="button">
+        <img class="nav-icon" alt="" data-icon="asset">
+        <span class="nav-label">자산</span>
+      </button>
+
+      <button class="nav-item" data-tab="weight" type="button">
+        <img class="nav-icon" alt="" data-icon="weight">
+        <span class="nav-label">비중</span>
+      </button>
+
+      <button class="nav-item" data-tab="trend" type="button">
+        <img class="nav-icon" alt="" data-icon="trend">
+        <span class="nav-label">추이</span>
+      </button>
+
+      <!-- 갱신은 탭이 아니라 기능 버튼 -->
+      <button class="nav-item nav-refresh" data-action="refresh" type="button">
+        <img class="nav-icon" alt="" data-icon="refresh">
+        <span class="nav-label">갱신</span>
+      </button>
     </nav>
   </div>
+
   <script src="./app.js"></script>
 </body>
 </html>
