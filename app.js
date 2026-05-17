@@ -5,11 +5,36 @@
    비워두면 MOCK_DATA로 화면 확인.
 ========================================================= */
 
-const CONFIG = {
-  apiUrl: "https://script.google.com/macros/s/AKfycbyUq9mOLoivF7NIrbFc95Qd-BxvoPiDGbfyAuj7B1fzB0ucrdzoj8hwF-ZY0T9n2pob/exec",
-  token: "my-stock-viewer-1234",
+let CONFIG = {
+  apiUrl: "",
+  token: "",
   smallWeightThreshold: 0.01
 };
+
+/**
+ * 개발 편의용 외부 설정 파일.
+ *
+ * GitHub 루트의 config.json만 수정하면
+ * Apps Script URL / token을 바꿀 수 있습니다.
+ *
+ * Date.now()를 붙여서 config.json 캐시를 최대한 피합니다.
+ */
+async function loadConfig() {
+  const res = await fetch("./config.json?v=" + Date.now(), {
+    cache: "no-store"
+  });
+
+  if (!res.ok) {
+    throw new Error("config.json을 불러오지 못했습니다.");
+  }
+
+  const externalConfig = await res.json();
+
+  CONFIG = {
+    ...CONFIG,
+    ...externalConfig
+  };
+}
 
 const NAV_ICONS = {
   quote: { off: "./assets/icons/nav/quote-off.png", on: "./assets/icons/nav/quote-on.png" },
@@ -79,10 +104,22 @@ function cash(account, symbol, name, currency, quantity, fxRate) {
   return { account, symbol, name, exchange: "CASH", assetType: "현금", currency, avgPrice: 1, quantity, currentPrice: 1, dayChangeAmount: 0, dayChangeRate: 0, fxRate, valueKrw: quantity * fxRate, principal: quantity, principalKrw: quantity * fxRate, profit: 0, profitRate: 0 };
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   setupNav();
+
+  /*
+    개발 중에는 service worker를 꺼둡니다.
+    캐시 때문에 app.js / style.css 수정이 반영되지 않는 문제를 줄이기 위함입니다.
+    앱이 완성된 뒤 다시 켜도 됩니다.
+  */
   // registerServiceWorker();
-  loadDashboard();
+
+  try {
+    await loadConfig();
+    await loadDashboard();
+  } catch (err) {
+    renderError(err.message || String(err));
+  }
 });
 
 async function registerServiceWorker() {

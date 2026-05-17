@@ -1,38 +1,22 @@
-const CACHE_NAME = "stockviewer-pwa-v3";
+/*
+  개발 중 service worker 캐시 제거용 파일입니다.
 
-const ASSETS = [
-  "./",
-  "./index.html",
-  "./style.css",
-  "./app.js",
-  "./manifest.json",
-  "./icon-192.svg",
-  "./icon-512.svg",
-  "./assets/icons/nav/quote-off.png",
-  "./assets/icons/nav/quote-on.png",
-  "./assets/icons/nav/asset-off.png",
-  "./assets/icons/nav/asset-on.png",
-  "./assets/icons/nav/weight-off.png",
-  "./assets/icons/nav/weight-on.png",
-  "./assets/icons/nav/trend-off.png",
-  "./assets/icons/nav/trend-on.png",
-  "./assets/icons/nav/refresh-off.png",
-  "./assets/icons/nav/refresh-on.png"
-];
+  이 파일은 기존 캐시를 지우고 service worker를 해제합니다.
+  개발 중에는 app.js에서 registerServiceWorker()를 주석 처리해두세요.
+*/
 
 self.addEventListener("install", event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS).catch(() => null)));
   self.skipWaiting();
 });
 
 self.addEventListener("activate", event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.map(key => {
-    if (key !== CACHE_NAME) return caches.delete(key);
-  }))));
-  self.clients.claim();
-});
-
-self.addEventListener("fetch", event => {
-  if (event.request.method !== "GET") return;
-  event.respondWith(caches.match(event.request).then(cached => cached || fetch(event.request)));
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(keys.map(key => caches.delete(key))))
+      .then(() => self.registration.unregister())
+      .then(() => self.clients.matchAll({ type: "window" }))
+      .then(clients => {
+        clients.forEach(client => client.navigate(client.url));
+      })
+  );
 });
