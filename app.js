@@ -104,7 +104,7 @@ function cash(account, symbol, name, currency, quantity, fxRate) {
   return { account, symbol, name, exchange: "CASH", assetType: "현금", currency, avgPrice: 1, quantity, currentPrice: 1, dayChangeAmount: 0, dayChangeRate: 0, fxRate, valueKrw: quantity * fxRate, principal: quantity, principalKrw: quantity * fxRate, profit: 0, profitRate: 0 };
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
+async function bootApp() {
   setupNav();
 
   /*
@@ -120,7 +120,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   } catch (err) {
     renderError(err.message || String(err));
   }
-});
+}
+
+/*
+  index.html에서 app.js를 동적으로 불러오면
+  DOMContentLoaded 이벤트가 이미 지나간 뒤 app.js가 실행될 수 있습니다.
+  그 경우 기존 DOMContentLoaded 리스너는 실행되지 않아
+  "자산뷰어를 불러오는 중..."에서 멈춥니다.
+*/
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootApp);
+} else {
+  bootApp();
+}
 
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
