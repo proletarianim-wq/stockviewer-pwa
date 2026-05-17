@@ -717,7 +717,7 @@ button { font-family: inherit; }
   :root {
     --screen-padding-x: 10px;
     --box-padding-x: 14px;
-    --font-05-size: 29px;
+    --font-05-size: 20px;
     --font-11-size: 17px;
     --font-12-size: 17px;
     --font-32-size: 18px;
