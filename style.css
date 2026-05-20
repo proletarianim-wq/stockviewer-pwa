@@ -62,7 +62,7 @@
   --color-cash: #3D8EF5;
 
   /* 종목별 고정 색상: 선명한 원색 톤 */
-  --symbol-chart-01: #2563EB;  /* 예수금 색과 겹치지 않도록 분리 */
+  --symbol-chart-01: #3D8EF5;
   --symbol-chart-02: #DC2626;
   --symbol-chart-03: #0A3D62;
   --symbol-chart-04: #65A30D;
@@ -75,7 +75,7 @@
   --symbol-chart-11: #CA8A04;
   --symbol-chart-12: #8A143F;
   --symbol-chart-etc:#9CA3AF;
-  --symbol-chart-cash: var(--color-cash);  /* 예수금 전용 색상 */
+  --symbol-chart-cash: var(--color-cash);
 
   /* 기존 chartColor 호환용 */
   --chart-01: var(--symbol-chart-01);
@@ -923,26 +923,33 @@ button { font-family: inherit; }
    8. TREND TAB
 ========================================================= */
 
-.trend-card {
-  border: var(--box-border-width) solid var(--color-box-border);
-  background: #fff;
-  padding: 18px 18px;
-  margin: 4px 0 14px;
+:root {
+  --trend-asset-color: #f24a73;
+  --trend-principal-color: #9aa3ad;
+  --trend-chart-height: 230px;
+  --trend-chart-margin-top: 8px;
+  --trend-x-label-height: 24px;
 }
 
-.trend-head {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: start;
-  margin-bottom: 8px;
+.trend-top-card .portfolio-summary-extra {
+  padding-top: var(--portfolio-extra-divider-padding-top);
+}
+
+.trend-account-summary {
+  padding-top: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.trend-panel {
+  padding: 10px 0 4px;
 }
 
 .trend-periods {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(8, 1fr);
   gap: 4px;
-  margin: 12px 0 8px;
+  margin: 2px 0 7px;
 }
 
 .trend-period-btn {
@@ -955,6 +962,7 @@ button { font-family: inherit; }
   color: #111;
   letter-spacing: var(--font-51-letter-spacing);
   padding: 7px 0;
+  line-height: 1;
 }
 
 .trend-period-btn.active {
@@ -962,11 +970,46 @@ button { font-family: inherit; }
   color: #fff;
 }
 
-.chart-wrap {
+.trend-legend {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  min-height: 16px;
+  margin: 0 0 2px;
+  font-family: var(--font-52-family);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-text-muted);
+  letter-spacing: -0.2px;
+}
+
+.trend-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.trend-legend-item i {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  border-radius: 99px;
+}
+
+.trend-legend-item.asset i { background: var(--trend-asset-color); }
+.trend-legend-item.principal i { background: var(--trend-principal-color); }
+
+.trend-selected-date {
+  margin-left: 2px;
+  color: #888;
+}
+
+.chart-wrap,
+.trend-chart-wrap {
   position: relative;
-  height: 220px;
-  margin-top: 8px;
-  border-bottom: 1px solid #eee;
+  height: var(--trend-chart-height);
+  margin-top: var(--trend-chart-margin-top);
   touch-action: none;
 }
 
@@ -974,20 +1017,91 @@ button { font-family: inherit; }
   width: 100%;
   height: 100%;
   display: block;
+  overflow: visible;
 }
 
-.chart-axis-label {
+.trend-grid-line {
+  stroke: #eeeeee;
+  stroke-width: 1.2;
+  stroke-dasharray: 5 5;
+}
+
+.trend-grid-line.bottom {
+  stroke-dasharray: none;
+}
+
+.trend-y-label {
   font-family: var(--font-53-family);
-  position: absolute;
-  right: 0;
   font-size: var(--font-53-size);
   font-weight: var(--font-53-weight);
-  color: var(--font-53-color);
+  fill: var(--font-53-color);
   letter-spacing: var(--font-53-letter-spacing);
 }
 
-.chart-axis-label.top { top: 10px; }
-.chart-axis-label.bottom { bottom: 8px; }
+.trend-principal-line {
+  fill: none;
+  stroke: var(--trend-principal-color);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 5 5;
+  opacity: 0.95;
+}
+
+.trend-asset-line {
+  fill: none;
+  stroke: var(--trend-asset-color);
+  stroke-width: 4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.trend-asset-area,
+.trend-principal-area {
+  pointer-events: none;
+}
+
+.trend-touch-line {
+  stroke: #ccd1d7;
+  stroke-width: 1.5;
+}
+
+.trend-touch-dot {
+  fill: var(--trend-asset-color);
+  stroke: #ffffff;
+  stroke-width: 2;
+}
+
+.trend-x-labels {
+  position: absolute;
+  left: 34px;
+  right: 34px;
+  bottom: 0;
+  height: var(--trend-x-label-height);
+  font-family: var(--font-52-family);
+  font-size: var(--font-52-size);
+  font-weight: var(--font-52-weight);
+  color: var(--font-52-color);
+  letter-spacing: var(--font-52-letter-spacing);
+}
+
+.trend-x-labels span {
+  position: absolute;
+  top: 5px;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+
+.trend-empty {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--color-text-muted);
+  font-weight: 800;
+  text-align: center;
+}
 
 .profit-rate-title {
   font-family: var(--font-54-family);
@@ -998,6 +1112,20 @@ button { font-family: inherit; }
   letter-spacing: var(--font-54-letter-spacing);
 }
 
+@media (max-width: 420px) {
+  .trend-periods {
+    gap: 2px;
+  }
+
+  .trend-period-btn {
+    font-size: 12px;
+    padding: 6px 0;
+  }
+
+  .trend-x-labels {
+    font-size: 10px;
+  }
+}
 
 /* =========================================================
    9. BOTTOM NAVIGATION

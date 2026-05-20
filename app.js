@@ -48,17 +48,21 @@ const NAV_ICONS = {
 const state = {
   activeTab: "quote",
   trendPeriod: "month",
+  trendPeriodByAccount: {},
   data: null,
   touchedTrendPoint: null,
-  isRefreshing: false
+  isRefreshing: false,
+  snapshotsLoaded: false
 };
 
 const TREND_PERIODS = [
-  { key: "year", label: "올해" },
   { key: "month", label: "이달" },
   { key: "oneMonth", label: "한달" },
   { key: "sixMonths", label: "6달" },
+  { key: "year", label: "올해" },
   { key: "oneYear", label: "1년" },
+  { key: "threeYears", label: "3년" },
+  { key: "fiveYears", label: "5년" },
   { key: "max", label: "최대" }
 ];
 
@@ -145,9 +149,14 @@ function setupNav() {
   ensureSyncNavButton();
 
   document.querySelectorAll(".nav-item[data-tab]").forEach(btn => {
-    btn.addEventListener("click", () => {
+    btn.addEventListener("click", async () => {
       state.activeTab = btn.dataset.tab;
       state.touchedTrendPoint = null;
+
+      if (state.activeTab === "trend" && !state.snapshotsLoaded) {
+        await loadSnapshotsIfNeeded();
+      }
+
       render();
     });
   });
@@ -209,6 +218,40 @@ async function loadDashboard(force = false) {
   } catch (err) {
     state.isRefreshing = false;
     renderError(err.message || String(err));
+  }
+}
+
+
+async function loadSnapshotsIfNeeded() {
+  if (state.snapshotsLoaded || !state.data) return;
+
+  if (!CONFIG.apiUrl) {
+    state.snapshotsLoaded = true;
+    return;
+  }
+
+  renderLoading("추이 데이터를 불러오는 중...");
+
+  try {
+    const url = new URL(CONFIG.apiUrl);
+    url.searchParams.set("action", "snapshots");
+    if (CONFIG.token) url.searchParams.set("token", CONFIG.token);
+
+    const data = await loadJsonp(url.toString());
+    if (data.ok === false) throw new Error(data.error || "API 오류");
+
+    state.data = {
+      ...state.data,
+      snapshots: data.snapshots || []
+    };
+  } catch (err) {
+    console.warn("snapshots load failed", err);
+    state.data = {
+      ...state.data,
+      snapshots: state.data.snapshots || []
+    };
+  } finally {
+    state.snapshotsLoaded = true;
   }
 }
 
@@ -1103,114 +1146,409 @@ function groupSmall(items) {
 ========================================================= */
 
 function renderTrendTab() {
-  const s = summary("전체계좌");
-  const points = state.data?.snapshots || [];
-  const selected = state.touchedTrendPoint || points[points.length - 1] || {
-    date: "",
-    totalAsset: s.total,
-    principal: s.basis,
-    profit: s.accountProfit,
-    profitRate: s.accountProfitRate
-  };
+  const topHtml = renderPortfolioSummaryCard(renderTrendGraphPanel("전체계좌"), "trend-top-card");
+
+  const accountHtml = accountNames()
+    .map((a, i) => renderAccountSection(a, renderTrendAccountContent(a), i + 1))
+    .join("");
+
+  return topHtml + accountHtml;
+}
+
+function renderTrendAccountContent(account) {
+  const s = summary(account);
+  return `
+    <div class="account-summary trend-account-summary">
+      <div>
+        <div class="amount-main">${formatWon(s.total)}</div>
+        <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+      </div>
+      ${renderProfitList(s)}
+    </div>
+    ${renderTrendGraphPanel(account)}
+  `;
+}
+
+function trendPeriodFor(account) {
+  return state.trendPeriodByAccount?.[account] || state.trendPeriod || "month";
+}
+
+function setTrendPeriodFor(account, period) {
+  if (!state.trendPeriodByAccount) state.trendPeriodByAccount = {};
+  state.trendPeriodByAccount[account] = period;
+}
+
+function renderTrendGraphPanel(account) {
+  const period = trendPeriodFor(account);
+  const raw = trendSnapshotPointsFor(account);
+  const current = currentTrendPoint(account);
+  const points = mergeTodayPoint(raw, current);
+  const range = trendRange(period, points);
+  const filtered = filterTrendPoints(points, range);
+  const sampled = sampleTrendPoints(filtered, maxTrendPointCount(period));
+  const selected = trendSelectedPoint(account, sampled) || sampled[sampled.length - 1] || current;
 
   return `
-    <section class="trend-card">
-      <div class="trend-head">
-        <div class="amount-main">${formatWon(selected.totalAsset)}</div>
-        <div class="principal-line">${formatWon(selected.principal)} <span class="pill-label">원금</span></div>
-      </div>
-
+    <div class="trend-panel" data-trend-account="${escapeHtml(account)}">
       <div class="trend-periods">
-        ${TREND_PERIODS.map(p => `<button class="trend-period-btn ${p.key === state.trendPeriod ? "active" : ""}" data-trend-period="${p.key}" type="button">${p.label}</button>`).join("")}
+        ${TREND_PERIODS.map(p => `<button class="trend-period-btn ${p.key === period ? "active" : ""}" data-trend-account="${escapeHtml(account)}" data-trend-period="${p.key}" type="button">${p.label}</button>`).join("")}
       </div>
-
-      <div class="chart-wrap" id="assetChart">
-        ${renderLineChart(points, selected)}
-        <div class="chart-axis-label top">자산</div>
-        <div class="chart-axis-label bottom">0원</div>
+      <div class="trend-legend">
+        <span class="trend-legend-item asset"><i></i>자산</span>
+        <span class="trend-legend-item principal"><i></i>원금</span>
+        <span class="trend-selected-date">${selected?.date ? formatTrendDateLabel(selected.date) : ""}</span>
       </div>
-
-      <div class="profit-rate-title">수익률</div>
-      <div class="muted" style="padding:30px 0 48px;text-align:center;">
-        SnapshotSummary가 쌓이면 수익률 그래프를 표시합니다.
+      <div class="chart-wrap trend-chart-wrap" data-trend-account="${escapeHtml(account)}">
+        ${renderAssetTrendChart(sampled, selected, range, period)}
       </div>
-    </section>
+    </div>
   `;
 }
 
 function attachTrendEvents() {
   document.querySelectorAll("[data-trend-period]").forEach(btn => {
     btn.addEventListener("click", () => {
-      state.trendPeriod = btn.dataset.trendPeriod;
+      const account = btn.dataset.trendAccount || "전체계좌";
+      setTrendPeriodFor(account, btn.dataset.trendPeriod);
+      state.touchedTrendPoint = null;
       render();
     });
   });
 
-  const chart = document.getElementById("assetChart");
-  if (!chart) return;
+  document.querySelectorAll(".trend-chart-wrap").forEach(chart => {
+    chart.addEventListener("pointerdown", e => {
+      chart.setPointerCapture?.(e.pointerId);
+      handleChartPointer(e);
+    });
 
-  chart.addEventListener("pointerdown", e => {
-    chart.setPointerCapture?.(e.pointerId);
-    handleChartPointer(e);
-  });
+    chart.addEventListener("pointermove", e => {
+      if (e.buttons || e.pressure > 0) handleChartPointer(e);
+    });
 
-  chart.addEventListener("pointermove", e => {
-    if (e.buttons || e.pressure > 0) handleChartPointer(e);
-  });
+    chart.addEventListener("pointerup", () => {
+      state.touchedTrendPoint = null;
+      render();
+    });
 
-  chart.addEventListener("pointerup", () => {
-    state.touchedTrendPoint = null;
-    render();
-  });
-
-  chart.addEventListener("pointercancel", () => {
-    state.touchedTrendPoint = null;
-    render();
+    chart.addEventListener("pointercancel", () => {
+      state.touchedTrendPoint = null;
+      render();
+    });
   });
 }
 
 function handleChartPointer(e) {
-  const points = state.data?.snapshots || [];
-  if (!points.length) return;
+  const account = e.currentTarget.dataset.trendAccount || "전체계좌";
+  const raw = trendSnapshotPointsFor(account);
+  const points = mergeTodayPoint(raw, currentTrendPoint(account));
+  const period = trendPeriodFor(account);
+  const range = trendRange(period, points);
+  const filtered = sampleTrendPoints(filterTrendPoints(points, range), maxTrendPointCount(period));
+  if (!filtered.length) return;
 
   const rect = e.currentTarget.getBoundingClientRect();
   const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  const idx = Math.round(ratio * (points.length - 1));
-  state.touchedTrendPoint = points[idx];
+  const targetMs = range.start.getTime() + ratio * (range.end.getTime() - range.start.getTime());
+
+  let best = filtered[0];
+  let bestDiff = Math.abs(parseDateKey(best.date).getTime() - targetMs);
+  filtered.forEach(p => {
+    const diff = Math.abs(parseDateKey(p.date).getTime() - targetMs);
+    if (diff < bestDiff) {
+      best = p;
+      bestDiff = diff;
+    }
+  });
+
+  state.touchedTrendPoint = { account, date: best.date };
   render();
 }
 
-function renderLineChart(points, selected) {
-  if (!points.length) return `<svg class="chart-svg"></svg>`;
+function renderAssetTrendChart(points, selected, range, period = state.trendPeriod) {
+  const width = 600;
+  const height = 230;
+  const padX = 34;
+  const padTop = 18;
+  const padBottom = 35;
+  const plotBottom = height - padBottom;
+  const plotHeight = plotBottom - padTop;
+  const id = "tg" + Math.floor(Math.random() * 1000000);
+  const ticks = trendTicks(period, range, points);
 
-  const width = 600, height = 220, padX = 34, padY = 20;
-  const max = Math.max(...points.map(p => Number(p.totalAsset || 0))) * 1.05;
+  if (!points.length) {
+    return `
+      <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+        <line class="trend-grid-line" x1="${padX}" y1="${plotBottom}" x2="${width - padX}" y2="${plotBottom}" />
+      </svg>
+      <div class="trend-empty">SnapshotSummary가 쌓이면 그래프를 표시합니다.</div>
+    `;
+  }
+
+  const maxValue = Math.max(
+    ...points.map(p => Number(p.totalAsset || 0)),
+    ...points.map(p => Number(p.principal || 0)),
+    1
+  );
+  const max = niceTrendMax(maxValue * 1.06);
   const min = 0;
+  const span = Math.max(1, range.end.getTime() - range.start.getTime());
+  const xFor = date => padX + ((parseDateKey(date).getTime() - range.start.getTime()) / span) * (width - padX * 2);
+  const yFor = value => plotBottom - ((Number(value || 0) - min) / Math.max(1, max - min)) * plotHeight;
 
-  const xy = points.map((p, i) => {
-    const x = padX + (i / Math.max(1, points.length - 1)) * (width - padX * 2);
-    const y = height - padY - ((Number(p.totalAsset || 0) - min) / Math.max(1, max - min)) * (height - padY * 2);
-    return { ...p, x, y };
-  });
+  const xy = points.map(p => ({
+    ...p,
+    x: Math.max(padX, Math.min(width - padX, xFor(p.date))),
+    assetY: yFor(p.totalAsset),
+    principalY: yFor(p.principal)
+  }));
 
-  const assetLine = xy.map((p, i) => `${i ? "L" : "M"} ${p.x} ${p.y}`).join(" ");
-  const principalLine = xy.map((p, i) => {
-    const y = height - padY - ((Number(p.principal || 0) - min) / Math.max(1, max - min)) * (height - padY * 2);
-    return `${i ? "L" : "M"} ${p.x} ${y}`;
-  }).join(" ");
-
-  const idx = selected ? Math.max(0, points.findIndex(p => p.date === selected.date)) : points.length - 1;
-  const sp = xy[idx >= 0 ? idx : points.length - 1];
+  const assetLine = makeSvgLinePath(xy, "assetY");
+  const principalLine = makeSvgLinePath(xy, "principalY");
+  const assetArea = makeSvgAreaPath(xy, "assetY", plotBottom);
+  const principalArea = makeSvgAreaPath(xy, "principalY", plotBottom);
+  const selectedPoint = selected ? xy.find(p => p.date === selected.date) : xy[xy.length - 1];
 
   return `
     <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-      <line x1="${padX}" y1="${padY}" x2="${width - padX}" y2="${padY}" stroke="#eee" stroke-dasharray="5 5"/>
-      <line x1="${padX}" y1="${height - padY}" x2="${width - padX}" y2="${height - padY}" stroke="#eee"/>
-      <path d="${principalLine}" fill="none" stroke="#d7dce1" stroke-width="3" stroke-dasharray="4 4"/>
-      <path d="${assetLine}" fill="none" stroke="#f24a73" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-      ${sp ? `<line x1="${sp.x}" y1="${padY}" x2="${sp.x}" y2="${height - padY}" stroke="#ccd1d7" stroke-width="2"/><circle cx="${sp.x}" cy="${sp.y}" r="6" fill="#f24a73"/>` : ""}
+      <defs>
+        <linearGradient id="${id}-asset" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--trend-asset-color)" stop-opacity="0.24" />
+          <stop offset="100%" stop-color="var(--trend-asset-color)" stop-opacity="0" />
+        </linearGradient>
+        <linearGradient id="${id}-principal" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="var(--trend-principal-color)" stop-opacity="0.16" />
+          <stop offset="100%" stop-color="var(--trend-principal-color)" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+
+      <line class="trend-grid-line" x1="${padX}" y1="${padTop}" x2="${width - padX}" y2="${padTop}" />
+      <line class="trend-grid-line bottom" x1="${padX}" y1="${plotBottom}" x2="${width - padX}" y2="${plotBottom}" />
+      <text class="trend-y-label top" x="${width - padX}" y="${padTop + 4}" text-anchor="end">${formatCompactWon(max)}</text>
+      <text class="trend-y-label bottom" x="${width - padX}" y="${plotBottom - 4}" text-anchor="end">0원</text>
+
+      <path class="trend-principal-area" d="${principalArea}" fill="url(#${id}-principal)" />
+      <path class="trend-asset-area" d="${assetArea}" fill="url(#${id}-asset)" />
+      <path class="trend-principal-line" d="${principalLine}" />
+      <path class="trend-asset-line" d="${assetLine}" />
+      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="5" />` : ""}
     </svg>
+    <div class="trend-x-labels">
+      ${ticks.map(t => `<span style="left:${trendTickPercent(t.date, range)}%">${escapeHtml(t.label)}</span>`).join("")}
+    </div>
   `;
+}
+
+function makeSvgLinePath(points, yKey) {
+  if (!points.length) return "";
+  return points.map((p, i) => `${i ? "L" : "M"} ${p.x.toFixed(2)} ${Number(p[yKey]).toFixed(2)}`).join(" ");
+}
+
+function makeSvgAreaPath(points, yKey, bottomY) {
+  if (!points.length) return "";
+  const line = makeSvgLinePath(points, yKey);
+  const first = points[0];
+  const last = points[points.length - 1];
+  return `${line} L ${last.x.toFixed(2)} ${bottomY} L ${first.x.toFixed(2)} ${bottomY} Z`;
+}
+
+function trendSnapshotPointsFor(account) {
+  const raw = state.data?.snapshots || [];
+  const normalized = raw.map(normalizeTrendSnapshot).filter(Boolean);
+
+  return normalized
+    .filter(p => {
+      if (account === "전체계좌") return p.scope === "TOTAL" || !p.scope;
+      return p.scope === "ACCOUNT" && p.account === account;
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function normalizeTrendSnapshot(r) {
+  if (!r) return null;
+  const date = String(r.date || r.baseDate || r["기준일"] || r["날짜"] || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+
+  const scope = String(r.scope || r["범위"] || "").toUpperCase();
+  const account = String(r.account || r["계좌"] || "");
+  const totalAsset = Number(r.totalAsset ?? r.valueKrw ?? r.valueKRW ?? r["평가금액_KRW"] ?? r["평가금액"] ?? 0);
+  const principal = Number(r.principal ?? r.basis ?? r.principalKrw ?? r["입금원금_KRW"] ?? r["평가원금_KRW"] ?? 0);
+  const profit = Number(r.profit ?? r.accountProfit ?? r["계좌수익_KRW"] ?? (totalAsset - principal));
+  const profitRate = Number(r.profitRate ?? r.accountProfitRate ?? r["계좌수익률"] ?? (principal ? profit / principal : 0));
+
+  return { date, scope, account, totalAsset, principal, profit, profitRate };
+}
+
+function currentTrendPoint(account) {
+  const s = summary(account);
+  return {
+    date: todayKey(),
+    scope: account === "전체계좌" ? "TOTAL" : "ACCOUNT",
+    account,
+    totalAsset: s.total,
+    principal: s.basis,
+    profit: s.accountProfit,
+    profitRate: s.accountProfitRate,
+    isLive: true
+  };
+}
+
+function mergeTodayPoint(points, todayPoint) {
+  const list = [...points];
+  if (!list.some(p => p.date === todayPoint.date)) list.push(todayPoint);
+  return list.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function filterTrendPoints(points, range) {
+  const start = startOfDay(range.start).getTime();
+  const end = endOfDay(range.end).getTime();
+  return points.filter(p => {
+    const t = parseDateKey(p.date).getTime();
+    return t >= start && t <= end;
+  });
+}
+
+function sampleTrendPoints(points, maxCount) {
+  if (points.length <= maxCount) return points;
+  const out = [];
+  const last = points.length - 1;
+  for (let i = 0; i < maxCount; i++) {
+    const idx = Math.round((i / (maxCount - 1)) * last);
+    const p = points[idx];
+    if (!out.length || out[out.length - 1].date !== p.date) out.push(p);
+  }
+  return out;
+}
+
+function maxTrendPointCount(period) {
+  if (period === "threeYears" || period === "fiveYears" || period === "max") return 360;
+  return 1200;
+}
+
+function trendSelectedPoint(account, points) {
+  const t = state.touchedTrendPoint;
+  if (!t || t.account !== account) return null;
+  return points.find(p => p.date === t.date) || null;
+}
+
+function trendRange(period, points = []) {
+  const today = startOfDay(new Date());
+  let start;
+  let end = today;
+
+  if (period === "month") start = new Date(today.getFullYear(), today.getMonth(), 1);
+  else if (period === "oneMonth") start = addDays(today, -30);
+  else if (period === "sixMonths") start = addMonths(today, -6);
+  else if (period === "year") start = new Date(today.getFullYear(), 0, 1);
+  else if (period === "oneYear") start = addMonths(today, -12);
+  else if (period === "threeYears") start = addMonths(today, -36);
+  else if (period === "fiveYears") start = addMonths(today, -60);
+  else {
+    const first = points.length ? parseDateKey(points[0].date) : today;
+    start = startOfDay(first);
+  }
+
+  if (period === "year") end = new Date(today.getFullYear(), 11, 31);
+  return { start: startOfDay(start), end: endOfDay(end) };
+}
+
+function trendTicks(period, range, points = []) {
+  const today = startOfDay(new Date());
+  const ticks = [];
+
+  if (period === "month") {
+    const y = today.getFullYear();
+    const m = today.getMonth();
+    const last = new Date(y, m + 1, 0).getDate();
+    [1, 5, 10, 15, 20, 25, last].forEach(d => ticks.push({ date: dateKey(new Date(y, m, Math.min(d, last))), label: d === last ? `${last}일` : `${d}일` }));
+  } else if (period === "oneMonth") {
+    for (let i = 0; i <= 6; i++) {
+      const d = addDays(range.start, i * 5);
+      ticks.push({ date: dateKey(d), label: formatMonthDay(d) });
+    }
+    ticks[ticks.length - 1] = { date: dateKey(range.end), label: formatMonthDay(range.end) };
+  } else if (period === "sixMonths") {
+    for (let i = 6; i >= 0; i--) {
+      const d = addMonths(today, -i);
+      ticks.push({ date: dateKey(d), label: formatMonthDay(d) });
+    }
+  } else if (period === "year") {
+    const y = today.getFullYear();
+    for (let m = 0; m < 12; m++) ticks.push({ date: dateKey(new Date(y, m, 1)), label: `${m + 1}/1` });
+    ticks.push({ date: dateKey(new Date(y, 11, 31)), label: "12/31" });
+  } else if (period === "oneYear") {
+    for (let i = 12; i >= 0; i--) {
+      const d = addMonths(today, -i);
+      ticks.push({ date: dateKey(d), label: formatMonthDay(d) });
+    }
+  } else if (period === "threeYears") {
+    for (let i = 36; i >= 0; i -= 3) {
+      const d = addMonths(today, -i);
+      ticks.push({ date: dateKey(d), label: formatYearMonth(d) });
+    }
+  } else if (period === "fiveYears") {
+    for (let i = 60; i >= 0; i -= 6) {
+      const d = addMonths(today, -i);
+      ticks.push({ date: dateKey(d), label: formatYearMonth(d) });
+    }
+  } else {
+    const start = range.start;
+    const end = range.end;
+    const span = Math.max(1, end.getTime() - start.getTime());
+    for (let i = 0; i <= 6; i++) {
+      const d = new Date(start.getTime() + span * (i / 6));
+      ticks.push({ date: dateKey(d), label: formatYearMonth(d) });
+    }
+  }
+
+  return ticks;
+}
+
+function trendTickPercent(date, range) {
+  const span = Math.max(1, range.end.getTime() - range.start.getTime());
+  return Math.max(0, Math.min(100, ((parseDateKey(date).getTime() - range.start.getTime()) / span) * 100));
+}
+
+function parseDateKey(date) {
+  const s = String(date || "").slice(0, 10);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return startOfDay(new Date());
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+}
+
+function todayKey() { return dateKey(new Date()); }
+function dateKey(d) {
+  const x = startOfDay(d);
+  const y = x.getFullYear();
+  const m = String(x.getMonth() + 1).padStart(2, "0");
+  const day = String(x.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+function startOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
+function endOfDay(d) { return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59, 999); }
+function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); return x; }
+function addMonths(d, n) { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; }
+function formatMonthDay(d) { return `${d.getMonth() + 1}/${d.getDate()}`; }
+function formatYearMonth(d) { return `${String(d.getFullYear()).slice(2)}/${String(d.getMonth() + 1).padStart(2, "0")}`; }
+function formatTrendDateLabel(date) {
+  const d = parseDateKey(date);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function niceTrendMax(v) {
+  const n = Number(v || 0);
+  if (n <= 0) return 1;
+  const pow = Math.pow(10, Math.floor(Math.log10(n)));
+  const scaled = n / pow;
+  const nice = scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10;
+  return nice * pow;
+}
+
+function formatCompactWon(v) {
+  const n = Number(v || 0);
+  if (n >= 1000000000000) return (n / 1000000000000).toFixed(1).replace(/\.0$/, "") + "조";
+  if (n >= 100000000) return (n / 100000000).toFixed(1).replace(/\.0$/, "") + "억";
+  if (n >= 10000) return Math.round(n / 10000).toLocaleString("ko-KR") + "만";
+  return Math.round(n).toLocaleString("ko-KR") + "원";
 }
 
 /* =========================================================
