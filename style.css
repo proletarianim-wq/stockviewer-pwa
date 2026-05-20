@@ -12,11 +12,12 @@
 
 :root {
   /* 기본 폰트 */
-  --font-family-base:
+  --font-family-base:         
+    "Pretendard Variable",
+    "Pretendard",
     system-ui,
     -apple-system,
     BlinkMacSystemFont,
-    "Roboto",
     "Noto Sans KR",
     "Apple SD Gothic Neo",
     "Malgun Gothic",
@@ -34,38 +35,81 @@
   --color-pill-bg: #eeeeee;
 
   /* 계좌 색상 */
-  --color-account-all: #858585;
+  /*--color-account-all: #858585;*/
+  --color-account-all: #3f4652;/*#1B1F2B;*/
   --color-account-blue: #4778c9;
   --color-account-orange: #f0a000;
+  
+
+  /* 계좌별 고정 색상 */
+  
+  --account-chart-01: #DB2777;  /* A */
+  --account-chart-02: #CA8A04;  /* B */
+  --account-chart-03: #0891B2;  /* C */
+  --account-chart-04: #8A143F;  /* D */
+  --account-chart-05: #9333EA;  /* E */
+  --account-chart-06: #4F46E5;  /* F */
+  --account-chart-07: #FB923C;  /* G */
+  --account-chart-08: #0F766E;  /* H */
+  --account-chart-09: #490558;  /* I */
+  --account-chart-10: #BE123C;  /* J */
+
+
+  
 
   /* 자산구분 색상 */
-  --color-stock: #f0a000;
-  --color-cash: #13b767;
+  --color-stock: #DC2626;
+  --color-cash: #3D8EF5;
 
-  /* 비중 차트 색상 */
-  --chart-01: #3e75cf;
-  --chart-02: #8d63e6;
-  --chart-03: #19b96b;
-  --chart-04: #e916d7;
-  --chart-05: #0c7f78;
-  --chart-06: #8a7900;
-  --chart-07: #47bde8;
-  --chart-08: #9e9e9e;
+  /* 종목별 고정 색상: 선명한 원색 톤 */
+  --symbol-chart-01: #2563EB;  /* 예수금 색과 겹치지 않도록 분리 */
+  --symbol-chart-02: #DC2626;
+  --symbol-chart-03: #0A3D62;
+  --symbol-chart-04: #65A30D;
+  --symbol-chart-05: #A78BFA;
+  --symbol-chart-06: #F99739;
+  --symbol-chart-07: #38BDF8;
+  --symbol-chart-08: #F43F5E;
+  --symbol-chart-09: #089992;
+  --symbol-chart-10: #4969BC;
+  --symbol-chart-11: #CA8A04;
+  --symbol-chart-12: #8A143F;
+  --symbol-chart-etc:#9CA3AF;
+  --symbol-chart-cash: var(--color-cash);  /* 예수금 전용 색상 */
+
+  /* 기존 chartColor 호환용 */
+  --chart-01: var(--symbol-chart-01);
+  --chart-02: var(--symbol-chart-02);
+  --chart-03: var(--symbol-chart-03);
+  --chart-04: var(--symbol-chart-04);
+  --chart-05: var(--symbol-chart-05);
+  --chart-06: var(--symbol-chart-06);
+  --chart-07: var(--symbol-chart-07);
+  --chart-08: var(--symbol-chart-08);
 
   /* 화면 크기/여백 */
   --app-max-width: 760px;
-  --screen-padding-x: 14px;
-  --screen-padding-top: 14px;
+  --screen-padding-x: 8px;
+  --screen-padding-top: 8px;
   --bottom-nav-height: 78px;
 
   /* 박스 공통 */
   --box-radius: 5px;
   --box-border-width: 2px;
-  --box-padding-x: 18px;
-  --box-padding-y: 14px;
-  --account-tab-height: 34px;
-  --account-tab-width: 230px;
-  --row-padding-y: 10px;
+  --box-padding-x: 8px;         /* 여백조절 제일 큰 박스 안쪽 좌우 여백 */
+  --box-padding-top: 5px;      /* 여백조절 자산탭 계좌박스안쪽 상단여백 */
+  --box-padding-bottom: 3px;     /* 여백조절 자산탭 계좌박스안쪽 gk단여백 */
+  --account-tab-height: 24px; /* 여백조절 크기조절 계좌이름 박스 세로 */
+  --account-tab-width: 150px; /* 여백조절 크기조절 계좌이름 박스 가로 */
+  --row-padding-y: 8px;       /* 여백조절 종목별 세로 간격  */
+
+  /* 상단 TOTAL PORTFOLIO 카드 공통 */
+  --portfolio-card-padding-top: 12px;    /* 여백조절 상단박스 내부 위 */
+  --portfolio-card-padding-x: 10px;      /* 여백조절 상단박스 내부 좌우 */
+  --portfolio-card-padding-bottom: 12px; /* 여백조절 상단박스 내부 아래 */
+  --portfolio-card-margin: 4px 0 14px;   /* 여백조절 상단박스 바깥 여백 */
+  --portfolio-extra-divider-margin-top: 12px;  /* 여백조절 상단 공통영역과 아래 바 사이 선 위 간격 */
+  --portfolio-extra-divider-padding-top: 12px; /* 여백조절 상단 공통영역과 아래 바 사이 선 아래 간격 */
 
   /* 하단 메뉴 */
   --nav-bg: #ffffff;
@@ -80,111 +124,171 @@
 
 :root {
   /* FONT 01: 네비게이션바 - 탭 제목 일반 */
+  /*--font-01-family: var(--font-family-base);*/
+  --font-01-family: "Roboto", "Pretendard Variable", sans-serif;
   --font-01-size: 13px;
   --font-01-weight: 700;
   --font-01-color: #aaa;
+  --font-01-letter-spacing: -0.0px;
 
   /* FONT 02: 네비게이션바 - 탭 제목 선택 */
+  --font-02-family: var(--font-family-base);
   --font-02-size: 13px;
   --font-02-weight: 900;
   --font-02-color: #111;
+  --font-02-letter-spacing: -0.0px;
 
   /* FONT 03: 모든 탭 - 계좌이름 */
-  --font-03-size: 18px;
-  --font-03-weight: 900;
+  --font-03-family: var(--font-family-base);
+  --font-03-size: 15px;
+  --font-03-weight: 800;
   --font-03-color: #fff;
+  --font-03-letter-spacing: -0.0px;
 
   /* FONT 04: 상단박스 - TOTAL PORTFOLIO */
-  --font-04-size: 15px;
-  --font-04-weight: 900;
+  --font-04-family: var(--font-family-base);
+  --font-04-size: 13px;
+  --font-04-weight: 1000;
   --font-04-color: #777;
-  --font-04-letter-spacing: 0.04em;
+  --font-04-letter-spacing: -0.04em;
 
-  /* FONT 05 (공통): 자산금액 */
+  /* FONT 05 (공통): 총자산금액 */
+  --font-05-family: var(--font-family-base);
   --font-05-size: 20px;
   --font-05-weight: 900;
-  --font-05-color: #858585; /*#050505;*/
+  --font-05-color: #050505;
   --font-05-letter-spacing: -0.8px;
+    
 
   /* FONT 06 (공통): 원금금액 */
+  --font-06-family: var(--font-family-base);
   --font-06-size: 14px;
   --font-06-weight: 800;
   --font-06-color: #858585;
+  --font-06-letter-spacing: -0.4px;
 
-  /* FONT 07 (공통): 박스 - 일간/평가/계좌 */
-  --font-07-size: 15px;
-  --font-07-weight: 900;
+  /* FONT 07 (공통): 상단박스 - 등락금액/등락율 */
+  --font-07-family: var(--font-family-base);
+  --font-07-size: 12px;
+  --font-07-weight: 700;
+  --font-07-letter-spacing: -0.4px;
+
+  /* FONT 08 : 작은 회색 박스 - 원금 / 일간 / 평가 / 계좌 */
+  --font-08-family: var(--font-family-base);
+  --font-08-size: 10px;
+  --font-08-weight: 600;
+  --font-08-color: #333;
+  --font-08-letter-spacing: -0.0px;
+  --font-08-bg: #eeeeee;
 
   /* FONT 11: 시세 - 주식이름 */
-  --font-11-size: 18px;
-  --font-11-weight: 900;
+  --font-11-family: var(--font-family-base);
+  --font-11-size: 14px;
+  --font-11-weight: 600;
   --font-11-color: #333;
+  --font-11-letter-spacing: -0.4px;
 
   /* FONT 12: 시세 - 현재주가 */
-  --font-12-size: 18px;
-  --font-12-weight: 900;
+  --font-12-family: var(--font-family-base);
+  --font-12-size: 15px;
+  --font-12-weight: 700;
   --font-12-color: #111;
+  --font-12-letter-spacing: -0.6px;
 
   /* FONT 13: 시세 - 등락금액/등락율 */
-  --font-13-size: 15px;
+  /*--font-13-family: var(--font-family-base);*/
+  --font-01-family: "Roboto", "Pretendard Variable", sans-serif;
+  --font-13-size: 11px;
   --font-13-weight: 600;
+  --font-13-letter-spacing: -0.4px;
 
   /* FONT 14: 시세 - 박스 평균가/수익율 */
-  --font-14-size: 13px;
+  --font-14-family: var(--font-family-base);
+  /*--font-14-family: "Roboto", "Pretendard Variable", sans-serif;*/
+  --font-14-size: 10px;
   --font-14-weight: 600;
-
-  /* FONT 15 (공통): 보유주식수 */
-  --font-15-size: 13px;
-  --font-15-weight: 700;
+  --font-14-color: #d33;
+  --font-14-letter-spacing: -0.4px;
+  
+  /* FONT 15 (공통): 박스 보유주식수 */
+  /*--font-15-family: var(--font-family-base); */
+  --font-14-family: "Roboto", "Pretendard Variable", sans-serif;
+  --font-15-size: 10px;
+  --font-15-weight: 600;
   --font-15-color: #222;
+  --font-15-letter-spacing: -0.4px;
 
   /* FONT 31: 자산 - 주식현금비중 */
-  --font-31-size: 13px;
+  --font-31-family: var(--font-family-base);
+  --font-31-size: 11px;
   --font-31-weight: 600;
   --font-31-color: #333;
+  --font-31-letter-spacing: -0.4px;
 
   /* FONT 32: 자산 - 종목별자산금액 */
-  --font-32-size: 20px;
-  --font-32-weight: 900;
+  --font-32-family: var(--font-family-base);
+  --font-32-size: 15px;
+  --font-32-weight: 700;
   --font-32-color: #111;
+  --font-32-letter-spacing: -0.6px;
 
   /* FONT 33: 자산 - 등락금액/등락율 */
-  --font-33-size: 14px;
-  --font-33-weight: 500;
+  --font-33-family: var(--font-family-base);
+  --font-33-size: 11px;
+  --font-33-weight: 700;
+  --font-33-letter-spacing: -0.6px;
+
+
+
+
 
   /* FONT 41: 비중 - 계좌/종목명 */
-  --font-41-size: 15px;
-  --font-41-weight: 800;
+  --font-14-family: "Roboto", "Pretendard Variable", sans-serif;
+  --font-41-size: 13px;
+  --font-41-weight: 700;
   --font-41-color: #222;
+  --font-41-letter-spacing: -0.0px;
 
-  /* FONT 42: 비중 - 보유퍼센트 */
-  --font-42-size: 14px;
-  --font-42-weight: 900;
+  /* FONT 42: 비중 - 금액/보유퍼센트 */
+  --font-14-family: "Roboto", "Pretendard Variable", sans-serif;
+  --font-42-size: 13px;
+  --font-42-weight: 700;
   --font-42-color: #111;
+  --font-42-letter-spacing: -0.6px;
 
   /* FONT 51: 추이 - 월/연도 선택 */
+  --font-51-family: var(--font-family-base);
   --font-51-size: 14px;
   --font-51-weight: 900;
+  --font-51-letter-spacing: -0.0px;
 
   /* FONT 52: 추이 - 그래프 가로 날짜 */
+  --font-52-family: var(--font-family-base);
   --font-52-size: 12px;
   --font-52-weight: 700;
   --font-52-color: #aaa;
+  --font-52-letter-spacing: -0.0px;
 
   /* FONT 53: 추이 - 그래프 세로 억/퍼센트 */
+  --font-53-family: var(--font-family-base);
   --font-53-size: 12px;
   --font-53-weight: 700;
   --font-53-color: #aaa;
+  --font-53-letter-spacing: -0.0px;
 
   /* FONT 54: 추이 - 수익률 제목 */
+  --font-54-family: var(--font-family-base);
   --font-54-size: 21px;
   --font-54-weight: 900;
   --font-54-color: #222;
+  --font-54-letter-spacing: -0.0px;
 
   /* FONT 55: 추이 - 터치 시 나타나는 날짜 */
+  --font-55-family: var(--font-family-base);
   --font-55-size: 13px;
   --font-55-weight: 800;
   --font-55-color: #666;
+  --font-55-letter-spacing: -0.0px;
 }
 
 
@@ -236,57 +340,88 @@ button { font-family: inherit; }
    3. TOP SUMMARY BOX
 ========================================================= */
 
-.top-card {
+.portfolio-summary-card,
+.top-card,
+.weight-top-card {
   border: var(--box-border-width) solid var(--color-box-border);
   border-radius: var(--box-radius);
-  padding: 12px 18px 10px;
-  margin: 4px 0 14px;
+  padding:
+    var(--portfolio-card-padding-top)
+    var(--portfolio-card-padding-x)
+    var(--portfolio-card-padding-bottom);
+  margin: var(--portfolio-card-margin);
   background: #fff;
 }
 
+.portfolio-summary-extra {
+  margin-top: var(--portfolio-extra-divider-margin-top);
+  padding-top: var(--portfolio-extra-divider-padding-top);
+  border-top: 1px solid var(--color-line);
+}
+
+/*
+  상단 TOTAL PORTFOLIO 카드 안의 추가 영역은 이미 위에서 분리선을 만들었으므로
+  첫 번째 바 영역의 기본 위쪽 여백을 중복 적용하지 않습니다.
+*/
+.portfolio-summary-extra > .asset-mix:first-child {
+  padding-top: 0;
+}
+
+.portfolio-summary-extra > .stacked-bar:first-child {
+  margin-top: 0;
+}
+
 .top-card-title {
+  font-family: var(--font-04-family);
   font-size: var(--font-04-size);
   font-weight: var(--font-04-weight);
   color: var(--font-04-color);
   letter-spacing: var(--font-04-letter-spacing);
   line-height: 1;
-  margin-bottom: 7px;
+  margin-bottom: 8px;
 }
 
 .top-card-body,
 .account-summary {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 8px;
   align-items: start;
 }
 
 .amount-main {
+  font-family: var(--font-05-family);
   font-size: var(--font-05-size);
   font-weight: var(--font-05-weight);
   color: var(--font-05-color);
   letter-spacing: var(--font-05-letter-spacing);
   line-height: 1.05;
   white-space: nowrap;
+  transform: scaleX(1.00);
+  transform-origin: left center;
 }
 
 .principal-line {
+  font-family: var(--font-06-family);
   margin-top: 8px;
   font-size: var(--font-06-size);
   font-weight: var(--font-06-weight);
   color: var(--font-06-color);
+  letter-spacing: var(--font-06-letter-spacing);
   white-space: nowrap;
 }
 
 .pill-label {
+  font-family: var(--font-08-family);
   display: inline-block;
   padding: 2px 6px;
   margin-right: 5px;
-  background: var(--color-pill-bg);
+  background: var(--font-08-bg);
   border-radius: 4px;
-  color: #777;
-  font-size: 12px;
-  font-weight: 800;
+  color: var(--font-08-color);
+  letter-spacing: var(--font-08-letter-spacing);
+  font-size: var(--font-08-size);
+  font-weight: var(--font-08-weight);
 }
 
 .summary-profit-list {
@@ -296,24 +431,28 @@ button { font-family: inherit; }
 }
 
 .summary-profit-row {
+  font-family: var(--font-07-family);
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 7px;
+  gap: 3px;             /* 여백조절 상단 박스의 회색텍스트상자 앞쪽 간격 */
   align-items: center;
   font-size: var(--font-07-size);
   font-weight: var(--font-07-weight);
+  letter-spacing: var(--font-07-letter-spacing);
   line-height: 1.05;
   white-space: nowrap;
   text-align: right;
 }
 
 .summary-profit-row .label {
-  color: #222;
-  background: #eee;
+  font-family: var(--font-08-family);
+  color: var(--font-08-color);
+  letter-spacing: var(--font-08-letter-spacing);
+  background: var(--font-08-bg);
   border-radius: 4px;
   padding: 1px 5px;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: var(--font-08-size);
+  font-weight: var(--font-08-weight);
 }
 
 
@@ -323,11 +462,12 @@ button { font-family: inherit; }
 
 .account-section {
   position: relative;
-  margin: 14px 0 16px;
+  margin: 14px 0 16px;    /* 여백조절 가장 큰 계좌박스 사이의 간격 박스의 상/좌우/하 */
   padding-top: var(--account-tab-height);
 }
 
 .account-tab {
+  font-family: var(--font-03-family);
   position: absolute;
   top: 0;
   left: 0;
@@ -335,9 +475,10 @@ button { font-family: inherit; }
   height: var(--account-tab-height);
   display: flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 10px;     /* 여백조절, 계좌이름 좌우 여백 */
   background: var(--account-color, var(--color-account-all));
   color: var(--font-03-color);
+  letter-spacing: var(--font-03-letter-spacing);
   font-size: var(--font-03-size);
   font-weight: var(--font-03-weight);
   line-height: 1;
@@ -346,12 +487,22 @@ button { font-family: inherit; }
 .account-box {
   border: var(--box-border-width) solid var(--account-color, var(--color-account-all));
   background: #fff;
-  padding: var(--box-padding-y) var(--box-padding-x);
+  padding: var(--box-padding-top) var(--box-padding-x) var(--box-padding-bottom) var(--box-padding-x);
 }
 
 .account-section.is-all { --account-color: var(--color-account-all); }
 .account-section.is-blue { --account-color: var(--color-account-blue); }
 .account-section.is-orange { --account-color: var(--color-account-orange); }
+
+/*
+  계좌 박스 탭/테두리 색상 통일.
+  비중탭 상단의 계좌별 원형기호와 누적바는 app.js의 계좌 고유색을 그대로 사용합니다.
+*/
+.account-section.is-blue,
+.account-section.is-orange,
+.account-section[class*="is-account-"] {
+  --account-color: var(--color-account-all);
+}
 
 
 /* =========================================================
@@ -360,8 +511,11 @@ button { font-family: inherit; }
 
 .quote-row {
   display: grid;
-  grid-template-columns: minmax(0, 1.25fr) minmax(104px, 0.8fr) minmax(100px, 0.55fr);
-  gap: 8px;
+  
+  grid-template-columns: 1fr 100px 120px; /* 여백조절 시세 3열 각각의 너비 조절 */
+  /*grid-template-columns: minmax(0, 1.25fr) minmax(104px, 0.8fr) minmax(100px, 0.55fr);*/
+
+  gap: 5px;   /* 여백조절 시세 3열간 사이 간격 */
   align-items: center;
   padding: var(--row-padding-y) 0;
   border-bottom: 1px solid var(--color-line);
@@ -370,12 +524,14 @@ button { font-family: inherit; }
 .quote-row:last-child { border-bottom: 0; }
 
 .stock-name {
+  font-family: var(--font-11-family);
   font-size: var(--font-11-size);
   font-weight: var(--font-11-weight);
   color: var(--font-11-color);
   line-height: 1.23;
-  letter-spacing: -0.4px;
-  word-break: keep-all;
+  letter-spacing: var(--font-11-letter-spacing);
+  word-break: normal;
+  overflow-wrap: anywhere;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -386,40 +542,92 @@ button { font-family: inherit; }
 .asset-value { text-align: right; }
 
 .current-price {
+  font-family: var(--font-12-family);
   font-size: var(--font-12-size);
   font-weight: var(--font-12-weight);
   color: var(--font-12-color);
+  letter-spacing: var(--font-12-letter-spacing);
   line-height: 1.05;
   white-space: nowrap;
 }
 
 .day-change {
-  margin-top: 4px;
+  font-family: var(--font-13-family);
+  margin-top: 4px;      /* 여백조절 시세 등락율 위쪽 여백 */
   font-size: var(--font-13-size);
   font-weight: var(--font-13-weight);
+  letter-spacing: var(--font-13-letter-spacing);
   line-height: 1.05;
   white-space: nowrap;
 }
 
-.side-pills { display: grid; gap: 5px; }
+.side-pills { display: grid; gap: 3px; }    /* 여백조절 시세 등락율 위쪽 여백 */
 
-.info-pill {
+.info-pill {                                
+  font-family: var(--font-15-family);
   display: block;
   width: 100%;
-  padding: 3px 6px;
-  border-radius: 4px;
+  padding: 2px 6px;     /* 여백조절 시세탭 자산탭 작은텍스트박스 */
+  border-radius: 3px;
   background: #d9d9d9;
   text-align: right;
+
+  .asset-row .info-pill {
+  padding: 1px 6px;
+}
+
+  /*
+    FONT 15 (공통): 보유주식수 박스
+    예: 5,020 주
+  */
   font-size: var(--font-15-size);
   font-weight: var(--font-15-weight);
   color: var(--font-15-color);
+  letter-spacing: var(--font-15-letter-spacing);
+
   line-height: 1.1;
   white-space: nowrap;
 }
 
-.info-pill.avg-profit { background: #f8d2d2; color: var(--color-profit); }
-.info-pill.avg-loss { background: #d5e7f6; color: var(--color-loss); }
-.info-pill .small-tag { margin-left: 2px; font-size: 11px; font-weight: 900; }
+/*
+  FONT 14: 시세 - 평균가/수익률 박스
+  예: 32,008(64.5%) 평
+
+  기존에는 .info-pill 전체가 FONT 15에 연결되어 있어서
+  윗칸 평균가 박스와 아래칸 보유수량 박스가 같은 폰트를 사용했습니다.
+  이제 avg-profit / avg-loss는 FONT 14로 분리합니다.
+*/
+.info-pill.avg-profit,
+.info-pill.avg-loss {
+  font-family: var(--font-14-family);
+  font-size: var(--font-14-size);
+  font-weight: var(--font-14-weight);
+  letter-spacing: var(--font-14-letter-spacing);
+}
+
+.info-pill.avg-profit {
+  background: #f8d2d2;
+  color: var(--color-profit);
+}
+
+.info-pill.avg-loss {
+  background: #d5e7f6;
+  color: var(--color-loss);
+}
+
+/*
+  박스 안의 단위 글자.
+  예: 평, 주
+
+  숫자와 단위가 서로 다른 크기로 보이지 않도록
+  부모 .info-pill의 폰트 크기/굵기를 그대로 상속합니다.
+*/
+.info-pill .small-tag {
+  margin-left: 2px;
+  font-size: inherit;
+  font-weight: inherit;
+  font-family: inherit;
+}
 
 
 /* =========================================================
@@ -427,23 +635,26 @@ button { font-family: inherit; }
 ========================================================= */
 
 .account-summary {
-  padding-bottom: 12px;
+  padding-top: 12px;    /* 여백조절 자산탭 박스내부 위쪽 여백 */
+  padding-bottom: 12px; /* 여백조절 자산탭 박스내부 아래쪽 여백 */
   border-bottom: 1px solid var(--color-line);
 }
 
 .asset-mix {
-  padding: 13px 0 12px;
+  padding: 12px 0 15px;     /* 여백조절 자산비중 바그래프 영역 전체 위/좌우/아래 여백 */
   border-bottom: 1px solid var(--color-line);
 }
 
 .mix-legend {
+  font-family: var(--font-31-family);
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 7px;
+  margin-bottom: 1px;     /* 여백조절 자산비중 글씨와 바형 그래프 사이 간격 */
   font-size: var(--font-31-size);
   font-weight: var(--font-31-weight);
   color: var(--font-31-color);
+  letter-spacing: var(--font-31-letter-spacing);
 }
 
 .legend-dot {
@@ -458,10 +669,10 @@ button { font-family: inherit; }
 .mix-stock { color: var(--color-stock); }
 .mix-cash { color: var(--color-cash); }
 
-.mix-bar {
+.mix-bar {      /* 자산탭 주식-현금 보유 바 설정 */
   display: flex;
   overflow: hidden;
-  height: 10px;
+  height: 14px;
   border-radius: 999px;
   background: #eee;
 }
@@ -471,54 +682,170 @@ button { font-family: inherit; }
 
 .asset-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(125px, auto) minmax(80px, auto);
-  gap: 8px;
+  /*grid-template-columns: minmax(0, 1fr) minmax(125px, auto) minmax(80px, auto);*/
+  grid-template-columns: 1fr 130px 90px;  /* 여백조절 자산탭 종목 3열 각각의 너비 조절 */
+  gap: 5px;
   align-items: center;
-  padding: 12px 0;
+  padding: 8px 0;            /* 여백조절 자산탭 종목 위아래/좌우 여백 */
   border-bottom: 1px solid var(--color-line);
 }
 
 .asset-row:last-child { border-bottom: 0; }
 
 .asset-amount {
+  font-family: var(--font-32-family);
   font-size: var(--font-32-size);
   font-weight: var(--font-32-weight);
   color: var(--font-32-color);
+  letter-spacing: var(--font-32-letter-spacing);
   line-height: 1.05;
   white-space: nowrap;
 }
 
 .asset-profit {
+  font-family: var(--font-33-family);
   margin-top: 5px;
   font-size: var(--font-33-size);
   font-weight: var(--font-33-weight);
+  letter-spacing: var(--font-33-letter-spacing);
   line-height: 1.05;
   white-space: nowrap;
 }
 
+.cash-summary-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+}
+
+.cash-summary-value {
+  text-align: right;
+}
+
+.cash-summary-top {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 5px;         /* 자산탭 예수금 환율박스와 총액 사이 간격 */
+}
+
+.cash-fx-pill {
+  width: auto;
+  min-width: 90px;    /* 자산탭 예수금 환율박스 폭 */
+  padding: 2px 6px;
+}
+
+.cash-detail {
+  margin-top: 4px;      /* 여백조절 자산탭 예수금 현금+달러 위쪽 여백 */
+  text-align: right;
+  padding-right: 3px;   /* 여백조걸 자산탭 예수금 현금+달러 우측 여백 */
+  white-space: nowrap;
+}
 
 /* =========================================================
    7. WEIGHT TAB
 ========================================================= */
 
-.weight-top-card {
-  border: var(--box-border-width) solid var(--color-box-border);
-  border-radius: var(--box-radius);
-  padding: 14px 18px 16px;
-  margin: 4px 0 14px;
-  background: #fff;
-}
+/*
+  .weight-top-card는 .portfolio-summary-card 공통 규칙을 함께 사용합니다.
+  상단박스 여백은 :root의 --portfolio-card-* 변수에서 통일 조절합니다.
+*/
 
 .stacked-bar {
   display: flex;
   overflow: hidden;
   height: 15px;
   border-radius: 999px;
-  margin: 16px 0 14px;
+  margin: 16px 5px 14px;      /*비중탭 최상단박스 바형그래프의 위/좌우/아래여백 */
   background: #eee;
 }
 
 .stacked-segment { min-width: 4px; }
+
+
+.account-weight-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 7px;         /*비중탭 최상단박스 계좌목록 행간 간격 */
+  margin-top: 12px; /*비중탭 최상단박스 바형그래프와 계좌목록 사이의 간격 */
+}
+
+.account-weight-line {      /* 비중탭 상단 계좌목록 처리 */
+  display: grid;
+  grid-template-columns: 10px 8px minmax(0, 1fr) 100px 50px;    /*여백조절 불릿-A-계좌-금액-비중 */
+  gap: 6px;
+  margin: 0px 8px 0px;
+  align-items: center;
+}
+
+.account-weight-no {
+  font-family: var(--font-41-family);
+  font-size: var(--font-41-size);
+  font-weight: var(--font-41-weight);
+  color: var(--font-41-color);
+  letter-spacing: var(--font-41-letter-spacing);
+  white-space: nowrap;
+  text-align: center;
+}
+
+.account-weight-name {
+  font-family: var(--font-41-family);
+  font-size: var(--font-41-size);
+  font-weight: var(--font-41-weight);
+  color: var(--font-41-color);
+  letter-spacing: var(--font-41-letter-spacing);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-weight-value,
+.account-weight-rate {
+  font-family: var(--font-42-family);
+  font-size: var(--font-42-size);
+  font-weight: var(--font-42-weight);
+  color: var(--font-42-color);
+  letter-spacing: var(--font-42-letter-spacing);
+  white-space: nowrap;
+  text-align: right;
+}
+
+
+.weight-detail-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 2px;     /*비중탭 계좌내 종목 행간 간격 */
+  margin-top: 0px;   /* 비중탭 계좌내 바형그래프와 목록 사이의 간격 */
+  margin-bottom: 8px;
+}
+
+.weight-detail-line {   /*비중탭 계좌 내 종목 한줄 설정 */
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) 100px 50px;    /* 여백조절 비중탭 종목목록 : 불릿-종목명-금액-비중 */
+  gap: 8px;           /* 4개 열 사이의 간격 */
+  align-items: center;
+  margin: 2px 8px;    /*종목 한줄의 위아래/좌우 바깥여백*/
+}
+
+.weight-detail-name {
+  font-family: var(--font-41-family);
+  font-size: var(--font-41-size);
+  font-weight: var(--font-41-weight);
+  color: var(--font-41-color);
+  letter-spacing: var(--font-41-letter-spacing);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.weight-detail-value,
+.weight-detail-rate {
+  font-family: var(--font-42-family);
+  font-size: var(--font-42-size);
+  font-weight: var(--font-42-weight);
+  color: var(--font-42-color);
+  letter-spacing: var(--font-42-letter-spacing);
+  white-space: nowrap;
+  text-align: right;
+}
 
 .weight-grid {
   display: grid;
@@ -527,14 +854,16 @@ button { font-family: inherit; }
 }
 
 .weight-item {
+  font-family: var(--font-41-family);
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: 10px minmax(0, 1fr) 65px;    /* 비중탭 도넛옆 목록 영역 : 불릿-종목명-퍼센트 */
   gap: 8px;
   align-items: center;
   font-size: var(--font-41-size);
   font-weight: var(--font-41-weight);
   color: var(--font-41-color);
-  margin: 7px 0;
+  letter-spacing: var(--font-41-letter-spacing);
+  margin: 7px 8px;
 }
 
 .weight-name {
@@ -544,10 +873,13 @@ button { font-family: inherit; }
 }
 
 .weight-rate {
+  font-family: var(--font-42-family);
   font-size: var(--font-42-size);
   font-weight: var(--font-42-weight);
   color: var(--font-42-color);
+  letter-spacing: var(--font-42-letter-spacing);
   white-space: nowrap;
+  text-align: right;
 }
 
 .color-dot {
@@ -559,27 +891,32 @@ button { font-family: inherit; }
 
 .donut-layout {
   display: grid;
-  grid-template-columns: 180px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 140px minmax(0, 1fr);    /* 여백조절 도넛이 차지하는 좌측 영역 */
+  gap: 10px;      /* 여백조절 도넛영역과 우측 목록 사이 간격 */
+  /*align-items: start; */   /* 여백조절 도넛 세로 위치 위쪽으로 */
   align-items: center;
+  padding: 8px 0;   /* 도넛 영역의 위/아래 여백 : 아래 margin-left로도 조절 가능*/
 }
 
 .donut {
-  width: 158px;
-  height: 158px;
+  width: 100px;     /* 도넛 가로 크기 */
+  height: 100px;    /* 도넛 세로 크기 */
   border-radius: 50%;
   background: conic-gradient(#ddd 0 100%);
   position: relative;
-  margin: 0 auto;
+  margin-left: 10px;    /* 도넛 좌우 위치 결정 */
+  margin-right: auto;   /* 도넛 좌우 위치 결정 */
 }
 
 .donut::after {
   content: "";
   position: absolute;
-  inset: 34px;
+  inset: 25px;      /* 도넛 링 두께 */
   border-radius: 50%;
   background: #fff;
 }
+
+
 
 
 /* =========================================================
@@ -609,12 +946,14 @@ button { font-family: inherit; }
 }
 
 .trend-period-btn {
+  font-family: var(--font-51-family);
   border: 0;
   border-radius: 999px;
   background: transparent;
   font-size: var(--font-51-size);
   font-weight: var(--font-51-weight);
   color: #111;
+  letter-spacing: var(--font-51-letter-spacing);
   padding: 7px 0;
 }
 
@@ -638,21 +977,25 @@ button { font-family: inherit; }
 }
 
 .chart-axis-label {
+  font-family: var(--font-53-family);
   position: absolute;
   right: 0;
   font-size: var(--font-53-size);
   font-weight: var(--font-53-weight);
   color: var(--font-53-color);
+  letter-spacing: var(--font-53-letter-spacing);
 }
 
 .chart-axis-label.top { top: 10px; }
 .chart-axis-label.bottom { bottom: 8px; }
 
 .profit-rate-title {
+  font-family: var(--font-54-family);
   margin-top: 28px;
   font-size: var(--font-54-size);
   font-weight: var(--font-54-weight);
   color: var(--font-54-color);
+  letter-spacing: var(--font-54-letter-spacing);
 }
 
 
@@ -668,7 +1011,7 @@ button { font-family: inherit; }
   height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
   padding: 5px 6px calc(6px + env(safe-area-inset-bottom));
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 2px;
   background: var(--nav-bg);
   border-top: 1px solid var(--nav-border);
@@ -694,16 +1037,20 @@ button { font-family: inherit; }
 }
 
 .nav-label {
+  font-family: var(--font-01-family);
   font-size: var(--font-01-size);
   font-weight: var(--font-01-weight);
   color: var(--font-01-color);
+  letter-spacing: var(--font-01-letter-spacing);
   line-height: 1;
 }
 
 .nav-item.active .nav-label {
+  font-family: var(--font-02-family);
   font-size: var(--font-02-size);
   font-weight: var(--font-02-weight);
   color: var(--font-02-color);
+  letter-spacing: var(--font-02-letter-spacing);
 }
 
 .nav-item:active { transform: scale(0.96); }
@@ -713,39 +1060,46 @@ button { font-family: inherit; }
    10. SMALL SCREEN TUNING
 ========================================================= */
 
-@media (max-width: 430px) {
-  :root {
-    --screen-padding-x: 10px;
-    --box-padding-x: 14px;
-    --font-05-size: 29px;
-    --font-11-size: 17px;
-    --font-12-size: 17px;
-    --font-32-size: 18px;
-    --nav-icon-size: 26px;
+/*
+  현재는 특정 폰 화면 기준으로 직접 조정하기 위해
+  작은 화면용 @media 보정은 비활성화했습니다.
+
+  나중에 여러 화면 크기를 다시 지원하려면 아래처럼 복구해서 사용하면 됩니다.
+
+  @media (max-width: 430px) {
+    :root {
+      --screen-padding-x: 10px;
+      --box-padding-x: 14px;
+      --font-05-size: 20px;
+      --font-11-size: 17px;
+      --font-12-size: 17px;
+      --font-32-size: 18px;
+      --nav-icon-size: 26px;
+    }
+
+    .top-card-body,
+    .account-summary,
+    .trend-head {
+      grid-template-columns: 1fr;
+    }
+
+    .summary-profit-list { min-width: 0; }
+
+    .quote-row {
+      grid-template-columns: minmax(0, 1fr) minmax(96px, auto) minmax(76px, auto);
+      gap: 6px;
+    }
+
+    .donut-layout {
+      grid-template-columns: 140px minmax(0, 1fr);
+      gap: 8px;
+    }
+
+    .donut {
+      width: 126px;
+      height: 126px;
+    }
+
+    .donut::after { inset: 27px; }
   }
-
-  .top-card-body,
-  .account-summary,
-  .trend-head {
-    grid-template-columns: 1fr;
-  }
-
-  .summary-profit-list { min-width: 0; }
-
-  .quote-row {
-    grid-template-columns: minmax(0, 1fr) minmax(96px, auto) minmax(76px, auto);
-    gap: 6px;
-  }
-
-  .donut-layout {
-    grid-template-columns: 140px minmax(0, 1fr);
-    gap: 8px;
-  }
-
-  .donut {
-    width: 126px;
-    height: 126px;
-  }
-
-  .donut::after { inset: 27px; }
-}
+*/
