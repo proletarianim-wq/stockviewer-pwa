@@ -62,7 +62,7 @@
   --color-cash: #3D8EF5;
 
   /* 종목별 고정 색상: 선명한 원색 톤 */
-  --symbol-chart-01: #3D8EF5;
+  --symbol-chart-01: #2563EB;
   --symbol-chart-02: #DC2626;
   --symbol-chart-03: #0A3D62;
   --symbol-chart-04: #65A30D;
@@ -99,7 +99,7 @@
   --box-padding-x: 8px;         /* 여백조절 제일 큰 박스 안쪽 좌우 여백 */
   --box-padding-top: 5px;      /* 여백조절 자산탭 계좌박스안쪽 상단여백 */
   --box-padding-bottom: 3px;     /* 여백조절 자산탭 계좌박스안쪽 gk단여백 */
-  --account-tab-height: 24px; /* 여백조절 크기조절 계좌이름 박스 세로 */
+  --account-tab-height: 20px; /* 여백조절 크기조절 계좌이름 박스 세로 */
   --account-tab-width: 150px; /* 여백조절 크기조절 계좌이름 박스 가로 */
   --row-padding-y: 8px;       /* 여백조절 종목별 세로 간격  */
 
@@ -140,7 +140,7 @@
 
   /* FONT 03: 모든 탭 - 계좌이름 */
   --font-03-family: var(--font-family-base);
-  --font-03-size: 15px;
+  --font-03-size: 12px;
   --font-03-weight: 800;
   --font-03-color: #fff;
   --font-03-letter-spacing: -0.0px;
@@ -264,17 +264,17 @@
 
   /* FONT 52: 추이 - 그래프 가로 날짜 */
   --font-52-family: var(--font-family-base);
-  --font-52-size: 12px;
-  --font-52-weight: 700;
+  --font-52-size: 10px;
+  --font-52-weight: 600;
   --font-52-color: #aaa;
-  --font-52-letter-spacing: -0.0px;
+  --font-52-letter-spacing: -0.4px;
 
   /* FONT 53: 추이 - 그래프 세로 억/퍼센트 */
   --font-53-family: var(--font-family-base);
-  --font-53-size: 12px;
-  --font-53-weight: 700;
+  --font-53-size: 10px;
+  --font-53-weight: 600;
   --font-53-color: #aaa;
-  --font-53-letter-spacing: -0.0px;
+  --font-53-letter-spacing: -0.4px;
 
   /* FONT 54: 추이 - 수익률 제목 */
   --font-54-family: var(--font-family-base);
@@ -339,6 +339,13 @@ button { font-family: inherit; }
 /* =========================================================
    3. TOP SUMMARY BOX
 ========================================================= */
+
+.top-card-link {
+  display: inline-block;
+  text-decoration: none;
+  color: inherit;
+}
+
 
 .portfolio-summary-card,
 .top-card,
@@ -926,9 +933,34 @@ button { font-family: inherit; }
 :root {
   --trend-asset-color: #f24a73;
   --trend-principal-color: #9aa3ad;
-  --trend-chart-height: 230px;
+
+  /* 추이 그래프 SVG 좌표계와 실제 plot 영역.
+     여기만 바꾸면 app.js의 그래프 좌표도 함께 바뀝니다. */
+  --trend-chart-viewbox-width: 600;   /* 그래프 그림판 크기. 가로-세로 */
+  --trend-chart-viewbox-height: 200;
+
+  --trend-plot-left: 15;              /* 실제 그래프 사각형 네 꼭지점 위치 */
+  --trend-plot-right: 543;
+  --trend-plot-top: 0;
+  --trend-plot-bottom: 195;
+
+  /* 그래프 내부 격자 위치. 0=상단, 1=하단 */
+  --trend-grid-y-1: 0.25;
+  --trend-grid-y-2: 0.50;
+  --trend-grid-y-3: 0.75;
+
+  /* 우측 세로축 라벨과 그래프 우측 끝선 사이 간격, SVG 좌표 단위 */
+  --trend-y-label-gap: 9;
+
+  /* 선택점 원 크기, SVG 좌표 단위 */
+  --trend-touch-dot-radius: 5;
+
+  /* 그래프 아래 그라데이션 농도 */
+  --trend-asset-area-opacity: 0.24;
+  --trend-principal-area-opacity: 0.16;
+
   --trend-chart-margin-top: 8px;
-  --trend-x-label-height: 24px;
+  --trend-x-label-height: 20px;   /* 가로축 레이블(날짜) 박스 높이 */
 }
 
 .trend-top-card .portfolio-summary-extra {
@@ -949,7 +981,7 @@ button { font-family: inherit; }
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 4px;
-  margin: 2px 0 7px;
+  margin: 2px 0 20px;  /* 기간선택 버튼들 위/좌우/아래 여백 조절 */
 }
 
 .trend-period-btn {
@@ -976,7 +1008,7 @@ button { font-family: inherit; }
   align-items: center;
   gap: 12px;
   min-height: 16px;
-  margin: 0 0 2px;
+  margin: 10px 0px 2px;    /* 범례 위/좌우/아래 여백 조절 */
   font-family: var(--font-52-family);
   font-size: 11px;
   font-weight: 700;
@@ -1008,26 +1040,38 @@ button { font-family: inherit; }
 .chart-wrap,
 .trend-chart-wrap {
   position: relative;
-  height: var(--trend-chart-height);
   margin-top: var(--trend-chart-margin-top);
+  padding-bottom: var(--trend-x-label-height);
   touch-action: none;
 }
 
 .chart-svg {
   width: 100%;
-  height: 100%;
+  height: auto;
+  aspect-ratio: var(--trend-chart-viewbox-width) / var(--trend-chart-viewbox-height);
   display: block;
   overflow: visible;
 }
 
-.trend-grid-line {
-  stroke: #eeeeee;
-  stroke-width: 1.2;
-  stroke-dasharray: 5 5;
+.trend-plot-border {      /* 추이 그래프 사각형 테두리 */
+  fill: none;
+  stroke: #e3e7eb;
+  stroke-width: 1.2;    /* 굵기 */
 }
 
-.trend-grid-line.bottom {
-  stroke-dasharray: none;
+/* 내부 격자 라인 */
+.trend-grid-line {
+  stroke: #eeeeee;
+  stroke-width: 1.1;
+  stroke-dasharray: 2 2;
+}
+
+.trend-grid-v {   
+  opacity: 0.95;    /* 세로선 투명도:*/
+}
+
+.trend-grid-h {
+  opacity: 0.95;    /* 가로선 투명도:*/
 }
 
 .trend-y-label {
@@ -1038,20 +1082,40 @@ button { font-family: inherit; }
   letter-spacing: var(--font-53-letter-spacing);
 }
 
-.trend-principal-line {
+.trend-y-labels {
+  position: absolute;
+  left: 0px;
+  right: 2px;
+  top: 0px;
+  bottom: var(--trend-x-label-height);
+  pointer-events: none;
+}
+
+.trend-y-label-html {
+  position: absolute;
+  transform: translateY(-50%);
+  font-family: var(--font-53-family);
+  font-size: var(--font-53-size);
+  font-weight: var(--font-53-weight);
+  color: var(--font-53-color);
+  letter-spacing: var(--font-53-letter-spacing);
+  white-space: nowrap;
+}
+
+.trend-principal-line {   /* 추이 그래프 원금 선 */
   fill: none;
   stroke: var(--trend-principal-color);
-  stroke-width: 3;
+  stroke-width: 3;        /* 굵기 */
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-dasharray: 5 5;
+  /*stroke-dasharray: 5 5; */ /* 원금 라인 점선 조절 */
   opacity: 0.95;
 }
 
-.trend-asset-line {
+.trend-asset-line {   /* 추이 그래프 자산 선 */
   fill: none;
   stroke: var(--trend-asset-color);
-  stroke-width: 4;
+  stroke-width: 4;    /* 굵기 */
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -1074,8 +1138,8 @@ button { font-family: inherit; }
 
 .trend-x-labels {
   position: absolute;
-  left: 34px;
-  right: 34px;
+  left: 0;
+  right: 0;
   bottom: 0;
   height: var(--trend-x-label-height);
   font-family: var(--font-52-family);
@@ -1087,7 +1151,7 @@ button { font-family: inherit; }
 
 .trend-x-labels span {
   position: absolute;
-  top: 5px;
+  top: 5px;           /* 추이 그래프 아래 날짜와 그래프 사이 간격 */
   transform: translateX(-50%);
   white-space: nowrap;
 }

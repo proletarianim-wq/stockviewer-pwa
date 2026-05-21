@@ -757,7 +757,14 @@ function renderPortfolioSummaryCard(extraHtml = "", className = "") {
   const s = summary("전체계좌");
   return `
     <section class="portfolio-summary-card ${className}">
-      <div class="top-card-title">TOTAL PORTFOLIO</div>
+      <a
+        class="top-card-title top-card-link"
+        href="https://finance.naver.com/item/main.naver?code=005930"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        TOTAL PORTFOLIO
+      </a>
       <div class="top-card-body">
         <div>
           <div class="amount-main">${formatWon(s.total)}</div>
@@ -1247,8 +1254,12 @@ function handleChartPointer(e) {
   if (!filtered.length) return;
 
   const rect = e.currentTarget.getBoundingClientRect();
-  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-  const targetMs = range.start.getTime() + ratio * (range.end.getTime() - range.start.getTime());
+  const plot = trendPlotGeometry_();
+  const plotLeftPx = rect.width * (plot.left / plot.width);
+  const plotRightPx = rect.width * (plot.right / plot.width);
+  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left - plotLeftPx) / Math.max(1, plotRightPx - plotLeftPx)));
+  const domain = trendDomainMs_(range);
+  const targetMs = domain.start + ratio * Math.max(1, domain.end - domain.start);
 
   let best = filtered[0];
   let bestDiff = Math.abs(parseDateKey(best.date).getTime() - targetMs);
@@ -1265,21 +1276,35 @@ function handleChartPointer(e) {
 }
 
 function renderAssetTrendChart(points, selected, range, period = state.trendPeriod) {
-  const width = 600;
-  const height = 230;
-  const padX = 34;
-  const padTop = 18;
-  const padBottom = 35;
-  const plotBottom = height - padBottom;
+  const plot = trendPlotGeometry_();
+  const width = plot.width;
+  const height = plot.height;
+  const plotLeft = plot.left;
+  const plotRight = plot.right;
+  const padTop = plot.top;
+  const plotBottom = plot.bottom;
+  const plotWidth = plotRight - plotLeft;
   const plotHeight = plotBottom - padTop;
+  const yLabelX = plotRight + readTrendCssNumber_("--trend-y-label-gap", 9);
+  const touchDotRadius = readTrendCssNumber_("--trend-touch-dot-radius", 5);
   const id = "tg" + Math.floor(Math.random() * 1000000);
   const ticks = trendTicks(period, range, points);
+  const gridY = trendGridYRatios_().map(r => padTop + plotHeight * r);
+  const xFor = date => plotLeft + trendDateRatio_(date, range) * plotWidth;
+  const tickItems = ticks.map(t => ({ ...t, x: xFor(t.date) }));
 
   if (!points.length) {
     return `
-      <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
-        <line class="trend-grid-line" x1="${padX}" y1="${plotBottom}" x2="${width - padX}" y2="${plotBottom}" />
+      <svg class="chart-svg" viewBox="0 0 ${width} ${height}">
+        ${gridY.map(y => `<line class="trend-grid-line trend-grid-h" x1="${plotLeft}" y1="${y}" x2="${plotRight}" y2="${y}" />`).join("")}
+        ${tickItems.map(t => `<line class="trend-grid-line trend-grid-v" x1="${t.x}" y1="${padTop}" x2="${t.x}" y2="${plotBottom}" />`).join("")}
+        <rect class="trend-plot-border" x="${plotLeft}" y="${padTop}" width="${plotWidth}" height="${plotHeight}" />
+        <!-- Y축 금액 라벨은 SVG 왜곡을 피하기 위해 HTML로 표시합니다. -->
       </svg>
+      ${renderTrendYLabels_("-", "0원", yLabelX, padTop, plotBottom, width, height)}
+      <div class="trend-x-labels">
+        ${tickItems.map(t => `<span style="left:${(t.x / width) * 100}%">${escapeHtml(t.label)}</span>`).join("")}
+      </div>
       <div class="trend-empty">SnapshotSummary가 쌓이면 그래프를 표시합니다.</div>
     `;
   }
@@ -1289,15 +1314,13 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
     ...points.map(p => Number(p.principal || 0)),
     1
   );
-  const max = niceTrendMax(maxValue * 1.06);
+  const max = niceTrendMax(maxValue * 1.1);   /*가장 큰 값이 세로축의 상단 90%쯤에 표시되도록 1.1을 곱함 */
   const min = 0;
-  const span = Math.max(1, range.end.getTime() - range.start.getTime());
-  const xFor = date => padX + ((parseDateKey(date).getTime() - range.start.getTime()) / span) * (width - padX * 2);
   const yFor = value => plotBottom - ((Number(value || 0) - min) / Math.max(1, max - min)) * plotHeight;
 
   const xy = points.map(p => ({
     ...p,
-    x: Math.max(padX, Math.min(width - padX, xFor(p.date))),
+    x: Math.max(plotLeft, Math.min(plotRight, xFor(p.date))),
     assetY: yFor(p.totalAsset),
     principalY: yFor(p.principal)
   }));
@@ -1309,33 +1332,96 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
   const selectedPoint = selected ? xy.find(p => p.date === selected.date) : xy[xy.length - 1];
 
   return `
-    <svg class="chart-svg" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">
+    <svg class="chart-svg" viewBox="0 0 ${width} ${height}">
       <defs>
         <linearGradient id="${id}-asset" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--trend-asset-color)" stop-opacity="0.24" />
+          <stop offset="0%" stop-color="var(--trend-asset-color)" stop-opacity="var(--trend-asset-area-opacity, 0.24)" />
           <stop offset="100%" stop-color="var(--trend-asset-color)" stop-opacity="0" />
         </linearGradient>
         <linearGradient id="${id}-principal" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--trend-principal-color)" stop-opacity="0.16" />
+          <stop offset="0%" stop-color="var(--trend-principal-color)" stop-opacity="var(--trend-principal-area-opacity, 0.16)" />
           <stop offset="100%" stop-color="var(--trend-principal-color)" stop-opacity="0" />
         </linearGradient>
       </defs>
 
-      <line class="trend-grid-line" x1="${padX}" y1="${padTop}" x2="${width - padX}" y2="${padTop}" />
-      <line class="trend-grid-line bottom" x1="${padX}" y1="${plotBottom}" x2="${width - padX}" y2="${plotBottom}" />
-      <text class="trend-y-label top" x="${width - padX}" y="${padTop + 4}" text-anchor="end">${formatCompactWon(max)}</text>
-      <text class="trend-y-label bottom" x="${width - padX}" y="${plotBottom - 4}" text-anchor="end">0원</text>
+      ${gridY.map(y => `<line class="trend-grid-line trend-grid-h" x1="${plotLeft}" y1="${y}" x2="${plotRight}" y2="${y}" />`).join("")}
+      ${tickItems.map(t => `<line class="trend-grid-line trend-grid-v" x1="${t.x}" y1="${padTop}" x2="${t.x}" y2="${plotBottom}" />`).join("")}
+      <rect class="trend-plot-border" x="${plotLeft}" y="${padTop}" width="${plotWidth}" height="${plotHeight}" />
+      <!-- Y축 금액 라벨은 SVG 왜곡을 피하기 위해 HTML로 표시합니다. -->
 
       <path class="trend-principal-area" d="${principalArea}" fill="url(#${id}-principal)" />
       <path class="trend-asset-area" d="${assetArea}" fill="url(#${id}-asset)" />
       <path class="trend-principal-line" d="${principalLine}" />
       <path class="trend-asset-line" d="${assetLine}" />
-      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="5" />` : ""}
+      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
     </svg>
+    ${renderTrendYLabels_(formatCompactWon(max), "0원", yLabelX, padTop, plotBottom, width, height)}
     <div class="trend-x-labels">
-      ${ticks.map(t => `<span style="left:${trendTickPercent(t.date, range)}%">${escapeHtml(t.label)}</span>`).join("")}
+      ${tickItems.map(t => `<span style="left:${(t.x / width) * 100}%">${escapeHtml(t.label)}</span>`).join("")}
     </div>
   `;
+}
+
+function trendPlotGeometry_() {
+  const width = readTrendCssNumber_("--trend-chart-viewbox-width", 600);
+  const height = readTrendCssNumber_("--trend-chart-viewbox-height", 230);
+  const left = readTrendCssNumber_("--trend-plot-left", 34);
+  const right = readTrendCssNumber_("--trend-plot-right", 558);
+  const top = readTrendCssNumber_("--trend-plot-top", 18);
+  const bottom = readTrendCssNumber_("--trend-plot-bottom", 195);
+
+  return {
+    width,
+    height,
+    left: Math.max(0, Math.min(width - 1, left)),
+    right: Math.max(left + 1, Math.min(width, right)),
+    top: Math.max(0, Math.min(height - 1, top)),
+    bottom: Math.max(top + 1, Math.min(height, bottom))
+  };
+}
+
+
+function trendGridYRatios_() {
+  return [
+    readTrendCssNumber_("--trend-grid-y-1", 0.25),
+    readTrendCssNumber_("--trend-grid-y-2", 0.5),
+    readTrendCssNumber_("--trend-grid-y-3", 0.75)
+  ]
+    .filter(v => Number.isFinite(v))
+    .map(v => Math.max(0, Math.min(1, v)));
+}
+
+function readTrendCssNumber_(name, fallback) {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+
+  const value = Number.parseFloat(raw);
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function renderTrendYLabels_(topText, bottomText, x, topY, bottomY, width, height) {
+  const leftPct = (x / width) * 100;
+  const topPct = (topY / height) * 100;
+  const bottomPct = (bottomY / height) * 100;
+
+  return `
+    <div class="trend-y-labels" aria-hidden="true">
+      <span class="trend-y-label-html top" style="left:${leftPct}%;top:${topPct}%">${escapeHtml(topText)}</span>
+      <span class="trend-y-label-html bottom" style="left:${leftPct}%;top:${bottomPct}%">${escapeHtml(bottomText)}</span>
+    </div>
+  `;
+}
+
+function trendDomainMs_(range) {
+  const start = startOfDay(range.start).getTime();
+  const end = startOfDay(range.end).getTime();
+  return { start, end: Math.max(start + 1, end) };
+}
+
+function trendDateRatio_(date, range) {
+  const domain = trendDomainMs_(range);
+  return Math.max(0, Math.min(1, (parseDateKey(date).getTime() - domain.start) / Math.max(1, domain.end - domain.start)));
 }
 
 function makeSvgLinePath(points, yKey) {
@@ -1358,9 +1444,31 @@ function trendSnapshotPointsFor(account) {
   return normalized
     .filter(p => {
       if (account === "전체계좌") return p.scope === "TOTAL" || !p.scope;
-      return p.scope === "ACCOUNT" && p.account === account;
+      return p.scope === "ACCOUNT" && trendAccountMatches_(p, account);
     })
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function trendAccountMatches_(snapshotPoint, account) {
+  const targetNo = trendAccountNo_(account);
+  const targetName = trendAccountName_(account);
+  const snapshotNo = String(snapshotPoint.accountNo || "").trim();
+  const snapshotName = trendAccountName_(snapshotPoint.account);
+
+  if (targetNo && snapshotNo && targetNo !== snapshotNo) return false;
+  if (snapshotName && snapshotName === targetName) return true;
+  if (targetNo && snapshotNo && targetNo === snapshotNo) return true;
+
+  return String(snapshotPoint.account || "").trim() === String(account || "").trim();
+}
+
+function trendAccountNo_(account) {
+  const m = String(account || "").trim().match(/^([A-Z])\s+/);
+  return m ? m[1] : "";
+}
+
+function trendAccountName_(account) {
+  return String(account || "").trim().replace(/^[A-Z]\s+/, "");
 }
 
 function normalizeTrendSnapshot(r) {
@@ -1369,13 +1477,14 @@ function normalizeTrendSnapshot(r) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
 
   const scope = String(r.scope || r["범위"] || "").toUpperCase();
-  const account = String(r.account || r["계좌"] || "");
+  const accountNo = String(r.accountNo || r.accountNumber || r["계좌번호"] || "").trim();
+  const account = String(r.account || r["계좌"] || "").trim();
   const totalAsset = Number(r.totalAsset ?? r.valueKrw ?? r.valueKRW ?? r["평가금액_KRW"] ?? r["평가금액"] ?? 0);
   const principal = Number(r.principal ?? r.basis ?? r.principalKrw ?? r["입금원금_KRW"] ?? r["평가원금_KRW"] ?? 0);
   const profit = Number(r.profit ?? r.accountProfit ?? r["계좌수익_KRW"] ?? (totalAsset - principal));
   const profitRate = Number(r.profitRate ?? r.accountProfitRate ?? r["계좌수익률"] ?? (principal ? profit / principal : 0));
 
-  return { date, scope, account, totalAsset, principal, profit, profitRate };
+  return { date, scope, accountNo, account, totalAsset, principal, profit, profitRate };
 }
 
 function currentTrendPoint(account) {
@@ -1435,10 +1544,18 @@ function trendRange(period, points = []) {
   let start;
   let end = today;
 
-  if (period === "month") start = new Date(today.getFullYear(), today.getMonth(), 1);
+  if (period === "month") {
+    start = new Date(today.getFullYear(), today.getMonth(), 1);
+    // 이달 그래프의 가로축은 월 전체(1일~말일)를 기준으로 고정합니다.
+    // 실제 데이터는 오늘까지만 있으므로 선은 오늘 위치까지만 그려집니다.
+    end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  }
   else if (period === "oneMonth") start = addDays(today, -30);
   else if (period === "sixMonths") start = addMonths(today, -6);
-  else if (period === "year") start = new Date(today.getFullYear(), 0, 1);
+  else if (period === "year") {
+    start = new Date(today.getFullYear(), 0, 1);
+    end = new Date(today.getFullYear(), 11, 31);
+  }
   else if (period === "oneYear") start = addMonths(today, -12);
   else if (period === "threeYears") start = addMonths(today, -36);
   else if (period === "fiveYears") start = addMonths(today, -60);
@@ -1447,7 +1564,6 @@ function trendRange(period, points = []) {
     start = startOfDay(first);
   }
 
-  if (period === "year") end = new Date(today.getFullYear(), 11, 31);
   return { start: startOfDay(start), end: endOfDay(end) };
 }
 
@@ -1504,8 +1620,7 @@ function trendTicks(period, range, points = []) {
 }
 
 function trendTickPercent(date, range) {
-  const span = Math.max(1, range.end.getTime() - range.start.getTime());
-  return Math.max(0, Math.min(100, ((parseDateKey(date).getTime() - range.start.getTime()) / span) * 100));
+  return trendDateRatio_(date, range) * 100;
 }
 
 function parseDateKey(date) {
@@ -1534,6 +1649,7 @@ function formatTrendDateLabel(date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
+/*
 function niceTrendMax(v) {
   const n = Number(v || 0);
   if (n <= 0) return 1;
@@ -1541,6 +1657,43 @@ function niceTrendMax(v) {
   const scaled = n / pow;
   const nice = scaled <= 1 ? 1 : scaled <= 2 ? 2 : scaled <= 5 ? 5 : 10;
   return nice * pow;
+}
+*/
+
+/*
+    A의 범위 : 0~1000만	A값을 올림해서 백만원 단위에 맞춤
+    A의 범위 : 1000만~5000만	A값을 올림해서 5백만원 단위에 맞춤
+    A의 범위 : 5000만~2억	A값을 올림해서 1000만원 단위에 맞춤
+    A의 범위 : 2억~5억		A값을 올림해서 5000만원 단위에 맞춤
+    A의 범위 : 5억~10억	A값을 올림해서 1억 단위에 맞춤
+    A의 범위 : 10억~20억	A값을 올림해서 2억 단위에 맞춤
+    A의 범위 : 20억~50억	A값을 올림해서 5억 단위에 맞춤
+*/
+function niceTrendMax(value) {
+  const v = Number(value || 0);
+  if (v <= 0) return 1;
+
+  let step;
+
+  if (v <= 10_000_000) {
+    step = 1_000_000;
+  } else if (v <= 50_000_000) {
+    step = 5_000_000;
+  } else if (v <= 200_000_000) {
+    step = 10_000_000;
+  } else if (v <= 500_000_000) {
+    step = 50_000_000;
+  } else if (v <= 1_000_000_000) {
+    step = 100_000_000;
+  } else if (v <= 2_000_000_000) {
+    step = 200_000_000;
+  } else if (v <= 5_000_000_000) {
+    step = 500_000_000;
+  } else {
+    step = 1_000_000_000;
+  }
+
+  return Math.ceil(v / step) * step;
 }
 
 function formatCompactWon(v) {
