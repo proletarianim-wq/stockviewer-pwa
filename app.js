@@ -199,7 +199,7 @@ async function loadDashboard(force = false) {
   renderLoading(force ? "전체 데이터 갱신중" : "자산뷰어를 불러오는 중...");
 
   try {
-    if (CONFIG.apiUrl) {
+   if (CONFIG.apiUrl) {
       const url = new URL(CONFIG.apiUrl);
       url.searchParams.set("action", "dashboard");
       if (CONFIG.token) url.searchParams.set("token", CONFIG.token);
@@ -207,7 +207,18 @@ async function loadDashboard(force = false) {
       const data = await loadJsonp(url.toString());
 
       if (data.ok === false) throw new Error(data.error || "API 오류");
-      state.data = data;
+
+      const previousSnapshots = state.data?.snapshots || [];
+
+      state.data = {
+        ...data,
+        snapshots: data.snapshots || previousSnapshots
+      };
+
+      if (state.activeTab === "trend") {
+        state.snapshotsLoaded = false;
+        await loadSnapshotsIfNeeded();
+      }
     } else {
       await wait(250);
       state.data = clone(MOCK_DATA);
@@ -757,14 +768,10 @@ function renderPortfolioSummaryCard(extraHtml = "", className = "") {
   const s = summary("전체계좌");
   return `
     <section class="portfolio-summary-card ${className}">
-      <a
-        class="top-card-title top-card-link"
-        href="https://finance.naver.com/item/main.naver?code=005930"
-        target="_blank"
-        rel="noopener noreferrer"
-      >
-        TOTAL PORTFOLIO
-      </a>
+      
+    <div class="top-card-title">TOTAL PORTFOLIO</div>
+
+
       <div class="top-card-body">
         <div>
           <div class="amount-main">${formatWon(s.total)}</div>

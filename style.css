@@ -340,13 +340,6 @@ button { font-family: inherit; }
    3. TOP SUMMARY BOX
 ========================================================= */
 
-.top-card-link {
-  display: inline-block;
-  text-decoration: none;
-  color: inherit;
-}
-
-
 .portfolio-summary-card,
 .top-card,
 .weight-top-card {
