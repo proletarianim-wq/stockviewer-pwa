@@ -51,6 +51,10 @@ const state = {
   trendPeriodByAccount: {},
   data: null,
   touchedTrendPoint: null,
+  trendMode: "trend",
+  trendHistoryDate: "",
+  snapshotDetail: null,
+  snapshotDetailDate: "",
   isRefreshing: false,
   snapshotsLoaded: false
 };
@@ -65,6 +69,422 @@ const TREND_PERIODS = [
   { key: "fiveYears", label: "5년" },
   { key: "max", label: "최대" }
 ];
+
+
+/* =========================================================
+   Local cache / progress helpers
+========================================================= */
+
+const LOCAL_DB = {
+  name: "stock-viewer-cache-v1",
+  version: 1,
+  store: "kv",
+  keys: {
+    baseData: "baseData",
+    snapshots: "snapshots"
+  }
+};
+
+function todayLocalKey_() {
+  return dateKey(new Date());
+}
+
+function openLocalDb_() {
+  return new Promise((resolve, reject) => {
+    if (!("indexedDB" in window)) {
+      reject(new Error("IndexedDB를 사용할 수 없습니다."));
+      return;
+    }
+
+    const req = indexedDB.open(LOCAL_DB.name, LOCAL_DB.version);
+
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(LOCAL_DB.store)) {
+        db.createObjectStore(LOCAL_DB.store);
+      }
+    };
+
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error("IndexedDB 열기 실패"));
+  });
+}
+
+async function idbGet_(key) {
+  const db = await openLocalDb_();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(LOCAL_DB.store, "readonly");
+    const store = tx.objectStore(LOCAL_DB.store);
+    const req = store.get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error || new Error("IndexedDB 읽기 실패"));
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => db.close();
+  });
+}
+
+async function idbSet_(key, value) {
+  const db = await openLocalDb_();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(LOCAL_DB.store, "readwrite");
+    const store = tx.objectStore(LOCAL_DB.store);
+    const req = store.put(value, key);
+    req.onsuccess = () => resolve(true);
+    req.onerror = () => reject(req.error || new Error("IndexedDB 저장 실패"));
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => db.close();
+  });
+}
+
+function renderProgress(title, lines = []) {
+  const safeLines = (lines || []).map(line => `<li>${escapeHtml(line)}</li>`).join("");
+  const screen = document.getElementById("screen");
+  if (!screen) return;
+
+  screen.innerHTML = `
+    <div class="loading-screen loading-progress">
+      <div class="loading-progress-title">${escapeHtml(title || "처리 중")}</div>
+      <ol class="loading-progress-list">${safeLines}</ol>
+    </div>
+  `;
+  updateNav();
+}
+
+function makeProgress_(title) {
+  const lines = [];
+  return message => {
+    lines.push(message);
+    renderProgress(title, lines);
+  };
+}
+
+async function loadJsonpAction_(action, params = {}) {
+  const url = new URL(CONFIG.apiUrl);
+  url.searchParams.set("action", action);
+  if (CONFIG.token) url.searchParams.set("token", CONFIG.token);
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") return;
+    url.searchParams.set(key, typeof value === "string" ? value : JSON.stringify(value));
+  });
+
+  const data = await loadJsonp(url.toString());
+  if (data?.ok === false) throw new Error(data.error || "API 오류");
+  return data;
+}
+
+async function fetchBaseDataFromGoogle_(addProgress) {
+  addProgress("AccountPositions를 구글시트로부터 읽고 있습니다.");
+  addProgress("Symbols를 구글시트로부터 읽고 있습니다.");
+
+  const data = await loadJsonpAction_("baseData");
+
+  addProgress("AccountPositions와 Symbols를 IndexedDB에 저장하고 있습니다.");
+  const base = normalizeBaseData_(data);
+  await idbSet_(LOCAL_DB.keys.baseData, {
+    savedAt: new Date().toISOString(),
+    savedDate: todayLocalKey_(),
+    base
+  });
+
+  return base;
+}
+
+async function readBaseDataFromIndexedDb_(addProgress) {
+  addProgress("AccountPositions를 IndexedDB로부터 읽고 있습니다.");
+  addProgress("Symbols를 IndexedDB로부터 읽고 있습니다.");
+
+  const cached = await idbGet_(LOCAL_DB.keys.baseData);
+  if (!cached?.base) throw new Error("IndexedDB에 AccountPositions/Symbols 캐시가 없습니다.");
+  return normalizeBaseData_(cached.base);
+}
+
+async function loadSnapshotsWithCache_(addProgress) {
+  addProgress("SnapshotSummary 캐시를 확인하고 있습니다.");
+
+  const today = todayLocalKey_();
+  const cached = await idbGet_(LOCAL_DB.keys.snapshots).catch(() => null);
+
+  if (cached?.loadedDate === today && Array.isArray(cached.snapshots)) {
+    addProgress("SnapshotSummary를 IndexedDB로부터 읽고 있습니다.");
+    return cached.snapshots;
+  }
+
+  addProgress("SnapshotSummary를 구글시트로부터 읽고 있습니다.");
+  const data = await loadJsonpAction_("snapshots");
+  const snapshots = Array.isArray(data.snapshots) ? data.snapshots : [];
+
+  addProgress("SnapshotSummary를 IndexedDB에 저장하고 있습니다.");
+  await idbSet_(LOCAL_DB.keys.snapshots, {
+    loadedDate: today,
+    loadedAt: new Date().toISOString(),
+    snapshots
+  });
+
+  return snapshots;
+}
+
+async function readSnapshotsFromIndexedDb_(addProgress) {
+  addProgress("SnapshotSummary를 IndexedDB로부터 읽고 있습니다.");
+  const cached = await idbGet_(LOCAL_DB.keys.snapshots);
+  return Array.isArray(cached?.snapshots) ? cached.snapshots : [];
+}
+
+function normalizeBaseData_(data) {
+  const positions = data.positions || data.accountPositions || [];
+  const symbols = data.symbols || {};
+  const accountBasisMap = data.accountBasisMap || buildAccountBasisMapFromPositions_(positions);
+  const totalBasis = data.totalBasis !== undefined
+    ? Number(data.totalBasis || 0)
+    : Object.values(accountBasisMap).reduce((sum, n) => sum + Number(n || 0), 0);
+  const accounts = data.accounts || getAccountsFromPositions_(positions);
+  const quoteTargets = data.quoteTargets || collectQuoteTargetsFromBase_(positions, symbols);
+
+  return {
+    generatedAt: data.generatedAt || new Date().toISOString(),
+    positions,
+    symbols,
+    accounts,
+    totalBasis,
+    accountBasisMap,
+    quoteTargets
+  };
+}
+
+function buildAccountBasisMapFromPositions_(positions) {
+  const map = {};
+  (positions || []).forEach(p => {
+    if (String(p.symbol || "") !== "원금") return;
+    map[p.account] = (map[p.account] || 0) + Number(p.quantity || 0);
+  });
+  return map;
+}
+
+function getAccountsFromPositions_(positions) {
+  const seen = {};
+  const out = [];
+  (positions || []).forEach(p => {
+    if (!p.account || seen[p.account]) return;
+    seen[p.account] = true;
+    out.push({ account: p.account, colorKey: accountClass(p.account) });
+  });
+  return out;
+}
+
+function fallbackSymbolClient_(symbol) {
+  const s = String(symbol || "").trim();
+  const currency = s.startsWith("CASH_USD") ? "USD" : "KRW";
+  return {
+    symbol: s,
+    name: s === "CASH_KRW" ? "원화 현금" : s === "CASH_USD" ? "달러 현금" : s,
+    exchange: s.startsWith("CASH_") ? "CASH" : "",
+    assetType: s.startsWith("CASH_") ? "현금" : "",
+    currency
+  };
+}
+
+function collectQuoteTargetsFromBase_(positions, symbols) {
+  const seen = {};
+  const list = [];
+  (positions || []).forEach(p => {
+    const symbol = String(p.symbol || "").trim();
+    if (!symbol || symbol === "원금" || isCash(symbol) || seen[symbol]) return;
+    const meta = symbols[symbol] || fallbackSymbolClient_(symbol);
+    seen[symbol] = true;
+    list.push({
+      symbol,
+      name: meta.name || symbol,
+      exchange: meta.exchange || "",
+      assetType: meta.assetType || "",
+      currency: meta.currency || "KRW"
+    });
+  });
+  return list;
+}
+
+function buildHoldingsFromBase_(base, quoteData = {}) {
+  const positions = base.positions || [];
+  const symbols = base.symbols || {};
+  const quotes = quoteData.quotes || {};
+  const usdKrw = Number(quoteData.usdKrw || base.usdKrw || 0);
+
+  return positions
+    .filter(p => String(p.symbol || "") !== "원금")
+    .map(p => {
+      const symbol = String(p.symbol || "").trim();
+      const meta = symbols[symbol] || fallbackSymbolClient_(symbol);
+      const quote = quotes[symbol] || {};
+      const currency = String(meta.currency || "KRW").toUpperCase();
+      const quantity = Number(p.quantity || 0);
+      const avgPrice = Number(p.avgPrice || 0);
+
+      let fxRate = currency === "USD"
+        ? Number(quote.fxRate || usdKrw || p.fxRate || 0)
+        : 1;
+      if (!fxRate) fxRate = Number(p.fxRate || 1);
+
+      let currentPrice = Number(quote.currentPrice || 0);
+      let dayChangeAmount = Number(quote.dayChangeAmount || 0);
+      let dayChangeRate = Number(quote.dayChangeRate || 0);
+
+      if (isCash(symbol)) {
+        currentPrice = 1;
+        dayChangeAmount = 0;
+        dayChangeRate = 0;
+      }
+
+      const principal = avgPrice * quantity;
+      const principalKrw = principal * fxRate;
+      const valueKrw = isCash(symbol)
+        ? quantity * fxRate
+        : currentPrice * quantity * fxRate;
+      const profit = isCash(symbol) ? 0 : valueKrw - principalKrw;
+      const profitRate = principalKrw ? profit / principalKrw : 0;
+
+      return {
+        account: p.account,
+        accountNo: p.accountNo || "",
+        accountName: p.accountName || "",
+        symbol,
+        name: meta.name || symbol,
+        exchange: meta.exchange || "",
+        assetType: meta.assetType || "",
+        currency,
+        avgPrice,
+        quantity,
+        currentPrice,
+        dayChangeAmount,
+        dayChangeRate,
+        fxRate,
+        valueKrw,
+        principal,
+        principalKrw,
+        profit,
+        profitRate
+      };
+    })
+    .filter(x => Math.abs(Number(x.quantity || 0)) > 0.000001);
+}
+
+function buildDataFromBase_(base, snapshots = [], quoteData = {}) {
+  const holdings = buildHoldingsFromBase_(base, quoteData);
+  return {
+    generatedAt: quoteData.generatedAt || base.generatedAt || new Date().toISOString(),
+    usdKrw: Number(quoteData.usdKrw || base.usdKrw || 0),
+    positions: base.positions || [],
+    symbols: base.symbols || {},
+    quoteTargets: base.quoteTargets || collectQuoteTargetsFromBase_(base.positions || [], base.symbols || {}),
+    accounts: base.accounts || getAccountsFromPositions_(base.positions || []),
+    holdings,
+    totalBasis: Number(base.totalBasis || 0),
+    accountBasisMap: base.accountBasisMap || {},
+    snapshots: snapshots || [],
+    debugTiming: quoteData.debugTiming || {}
+  };
+}
+
+async function fetchQuotesForBase_(base, addProgress) {
+  const targets = base.quoteTargets || collectQuoteTargetsFromBase_(base.positions || [], base.symbols || {});
+  addProgress("한투 API로 시세를 갱신하고 있습니다.");
+
+  if (!CONFIG.apiUrl) {
+    await wait(250);
+    const mock = clone(MOCK_DATA);
+    return {
+      generatedAt: new Date().toISOString(),
+      usdKrw: detectUsdKrwFromHoldings_(mock.holdings),
+      quotes: buildMockQuoteMap_(mock.holdings)
+    };
+  }
+
+  return await loadJsonpAction_("quotes", { symbols: targets });
+}
+
+async function loadAppData_(mode = "startup") {
+  const isSync = mode === "sync";
+  const title = isSync ? "동기화 중" : "앱을 시작하는 중";
+  const addProgress = makeProgress_(title);
+
+  if (isSync) state.isRefreshing = "sync";
+
+  try {
+    let base;
+    let snapshots;
+
+    if (CONFIG.apiUrl) {
+      base = await fetchBaseDataFromGoogle_(addProgress);
+      snapshots = await loadSnapshotsWithCache_(addProgress);
+    } else {
+      addProgress("MOCK_DATA를 사용하고 있습니다.");
+      await wait(250);
+      base = normalizeBaseData_({
+        positions: MOCK_DATA.holdings.map(h => ({
+          account: h.account,
+          symbol: h.symbol,
+          avgPrice: h.avgPrice,
+          quantity: h.quantity
+        })).concat(Object.entries(MOCK_DATA.accountBasisMap || {}).map(([account, basis]) => ({
+          account,
+          symbol: "원금",
+          avgPrice: 1,
+          quantity: basis
+        }))),
+        symbols: Object.fromEntries((MOCK_DATA.holdings || []).map(h => [h.symbol, {
+          symbol: h.symbol,
+          name: h.name,
+          exchange: h.exchange,
+          assetType: h.assetType,
+          currency: h.currency
+        }])),
+        accounts: MOCK_DATA.accounts,
+        totalBasis: MOCK_DATA.totalBasis,
+        accountBasisMap: MOCK_DATA.accountBasisMap
+      });
+      snapshots = MOCK_DATA.snapshots || [];
+    }
+
+    state.data = buildDataFromBase_(base, snapshots, {});
+    state.snapshotsLoaded = true;
+
+    const quoteData = await fetchQuotesForBase_(base, addProgress);
+    state.data = buildDataFromBase_(base, snapshots, quoteData);
+
+    addProgress("화면을 갱신하고 있습니다.");
+    state.isRefreshing = false;
+    render();
+  } catch (err) {
+    state.isRefreshing = false;
+    renderError(err.message || String(err));
+  }
+}
+
+async function refreshFromLocalCache_() {
+  const addProgress = makeProgress_("새로고침 중");
+  state.isRefreshing = "refresh";
+
+  try {
+    const base = await readBaseDataFromIndexedDb_(addProgress);
+    let snapshots = [];
+    try {
+      snapshots = await readSnapshotsFromIndexedDb_(addProgress);
+    } catch (_) {
+      snapshots = state.data?.snapshots || [];
+    }
+
+    state.data = buildDataFromBase_(base, snapshots, {});
+    state.snapshotsLoaded = true;
+
+    const quoteData = await fetchQuotesForBase_(base, addProgress);
+    state.data = buildDataFromBase_(base, snapshots, quoteData);
+
+    addProgress("화면을 갱신하고 있습니다.");
+    state.isRefreshing = false;
+    render();
+  } catch (err) {
+    state.isRefreshing = false;
+    renderError(err.message || String(err));
+  }
+}
 
 const MOCK_DATA = {
   totalBasis: 420000000,
@@ -122,7 +542,7 @@ async function bootApp() {
 
   try {
     await loadConfig();
-    await loadDashboard();
+    await loadAppData_("startup");
   } catch (err) {
     renderError(err.message || String(err));
   }
@@ -162,7 +582,7 @@ function setupNav() {
   });
 
   const syncBtn = document.querySelector(".nav-sync");
-  if (syncBtn) syncBtn.addEventListener("click", () => loadDashboard(true));
+  if (syncBtn) syncBtn.addEventListener("click", () => loadAppData_("sync"));
 
   const refreshBtn = document.querySelector(".nav-refresh");
   if (refreshBtn) refreshBtn.addEventListener("click", () => refreshQuotesOnly());
@@ -194,66 +614,23 @@ function ensureSyncNavButton() {
 }
 
 async function loadDashboard(force = false) {
-  if (force) state.isRefreshing = "sync";
-
-  renderLoading(force ? "전체 데이터 갱신중" : "자산뷰어를 불러오는 중...");
-
-  try {
-   if (CONFIG.apiUrl) {
-      const url = new URL(CONFIG.apiUrl);
-      url.searchParams.set("action", "dashboard");
-      if (CONFIG.token) url.searchParams.set("token", CONFIG.token);
-
-      const data = await loadJsonp(url.toString());
-
-      if (data.ok === false) throw new Error(data.error || "API 오류");
-
-      const previousSnapshots = state.data?.snapshots || [];
-
-      state.data = {
-        ...data,
-        snapshots: data.snapshots || previousSnapshots
-      };
-
-      if (state.activeTab === "trend") {
-        state.snapshotsLoaded = false;
-        await loadSnapshotsIfNeeded();
-      }
-    } else {
-      await wait(250);
-      state.data = clone(MOCK_DATA);
-    }
-
-    state.isRefreshing = false;
-    render();
-  } catch (err) {
-    state.isRefreshing = false;
-    renderError(err.message || String(err));
-  }
+  await loadAppData_(force ? "sync" : "startup");
 }
 
 
 async function loadSnapshotsIfNeeded() {
   if (state.snapshotsLoaded || !state.data) return;
 
-  if (!CONFIG.apiUrl) {
-    state.snapshotsLoaded = true;
-    return;
-  }
-
-  renderLoading("추이 데이터를 불러오는 중...");
+  const addProgress = makeProgress_("추이 데이터를 준비하는 중");
 
   try {
-    const url = new URL(CONFIG.apiUrl);
-    url.searchParams.set("action", "snapshots");
-    if (CONFIG.token) url.searchParams.set("token", CONFIG.token);
-
-    const data = await loadJsonp(url.toString());
-    if (data.ok === false) throw new Error(data.error || "API 오류");
+    const snapshots = CONFIG.apiUrl
+      ? await loadSnapshotsWithCache_(addProgress)
+      : (MOCK_DATA.snapshots || []);
 
     state.data = {
       ...state.data,
-      snapshots: data.snapshots || []
+      snapshots
     };
   } catch (err) {
     console.warn("snapshots load failed", err);
@@ -266,114 +643,53 @@ async function loadSnapshotsIfNeeded() {
   }
 }
 
-/*
-async function refreshQuotesOnly() {
-  if (!state.data || !holdings().length) {
-    await loadDashboard(true);
+async function loadSnapshotDetailForDate(date = "") {
+  if (!state.data) return;
+
+  const targetDate = date || state.trendHistoryDate || latestSnapshotDate_();
+
+  if (
+    state.snapshotDetail &&
+    state.snapshotDetailDate &&
+    (!targetDate || state.snapshotDetailDate === targetDate)
+  ) {
     return;
   }
 
-  state.isRefreshing = "refresh";
-  renderLoading("시세 갱신중");
-
-    try {
-    if (CONFIG.apiUrl) {
-      const url = new URL(CONFIG.apiUrl);
-      url.searchParams.set("action", "quotes");
-      if (CONFIG.token) url.searchParams.set("token", CONFIG.token);
-      url.searchParams.set("symbols", JSON.stringify(quoteTargetsFromCurrentHoldings()));
-
-      const data = await loadJsonp(url.toString());
-      if (data.ok === false) throw new Error(data.error || "API 오류");
-
-      applyQuoteRefresh(data);
-    } else {
-      await wait(250);
-      const mock = clone(MOCK_DATA);
-      applyQuoteRefresh({
-        generatedAt: new Date().toISOString(),
-        usdKrw: detectUsdKrwFromHoldings_(mock.holdings),
-        quotes: buildMockQuoteMap_(mock.holdings)
-      });
-    }
-
-    state.isRefreshing = false;
-    render();
-  } catch (err) {
-    state.isRefreshing = false;
-    renderError(err.message || String(err));
-  }
+  const detail = buildSnapshotDetailFromCachedSnapshots_(targetDate);
+  state.snapshotDetail = detail;
+  state.snapshotDetailDate = detail?.date || targetDate || "";
+  state.trendHistoryDate = state.snapshotDetailDate;
 }
-*/
+
+function buildMockSnapshotDetail_(date = "") {
+  const d = date || todayKey();
+  const accounts = accountNames().map((account, idx) => ({
+    account,
+    accountNo: splitAccountLabel(account).no,
+    colorKey: accountClass(account, idx),
+    summary: summary(account)
+  }));
+
+  return {
+    ok: true,
+    date: d,
+    availableDates: [d],
+    total: summary("전체계좌"),
+    accounts,
+    holdings: clone(holdings())
+  };
+}
+
+
 
 async function refreshQuotesOnly() {
-  const t0 = performance.now();
-  const stamp = label => {
-    console.log(`[refresh] ${label}: ${Math.round(performance.now() - t0)}ms`);
-  };
-
-  console.log("[refresh] start");
-
-  if (!state.data || !holdings().length) {
-    stamp("no data, fallback to loadDashboard");
-    await loadDashboard(true);
-    stamp("fallback dashboard done");
+  if (!CONFIG.apiUrl) {
+    await loadAppData_("startup");
     return;
   }
 
-  state.isRefreshing = "refresh";
-  renderLoading("시세 갱신중");
-  stamp("after renderLoading");
-
-  try {
-    if (CONFIG.apiUrl) {
-      const targets = quoteTargetsFromCurrentHoldings();
-      stamp(`after quoteTargetsFromCurrentHoldings, count=${targets.length}`);
-      console.log("[refresh] targets", targets);
-
-      const url = new URL(CONFIG.apiUrl);
-      url.searchParams.set("action", "quotes");
-      if (CONFIG.token) url.searchParams.set("token", CONFIG.token);
-      url.searchParams.set("symbols", JSON.stringify(targets));
-
-      stamp("before loadJsonp");
-      const data = await loadJsonp(url.toString());
-      stamp("after loadJsonp");
-
-      if (data.ok === false) throw new Error(data.error || "API 오류");
-
-      console.log("[refresh] response keys", Object.keys(data || {}));
-      console.log("[refresh] quotes count", Object.keys(data.quotes || {}).length);
-
-      applyQuoteRefresh(data);
-      stamp("after applyQuoteRefresh");
-    } else {
-      stamp("mock start");
-
-      await wait(250);
-      const mock = clone(MOCK_DATA);
-
-      applyQuoteRefresh({
-        generatedAt: new Date().toISOString(),
-        usdKrw: detectUsdKrwFromHoldings_(mock.holdings),
-        quotes: buildMockQuoteMap_(mock.holdings)
-      });
-
-      stamp("mock after applyQuoteRefresh");
-    }
-
-    state.isRefreshing = false;
-
-    stamp("before render");
-    render();
-    stamp("after render");
-  } catch (err) {
-    state.isRefreshing = false;
-    console.error("[refresh] error", err);
-    stamp("error before renderError");
-    renderError(err.message || String(err));
-    stamp("error after renderError");
-  }
+  await refreshFromLocalCache_();
 }
 
 
@@ -397,6 +713,12 @@ function quoteTargetsFromCurrentHoldings() {
 }
 
 function applyQuoteRefresh(data) {
+  if (state.data?.positions && state.data?.symbols) {
+    const base = normalizeBaseData_(state.data);
+    state.data = buildDataFromBase_(base, state.data.snapshots || [], data || {});
+    return;
+  }
+
   const quotes = data?.quotes || {};
   const usdKrw = Number(data?.usdKrw || state.data?.usdKrw || 0);
 
@@ -1160,14 +1482,420 @@ function groupSmall(items) {
 ========================================================= */
 
 function renderTrendTab() {
+  const mode = state.trendMode || "trend";
+  const modeHtml = renderTrendModeControls();
+
+  if (mode === "historyAsset") {
+    return modeHtml + renderHistoricalAssetView();
+  }
+
+  if (mode === "historyWeight") {
+    return modeHtml + renderHistoricalWeightView();
+  }
+
   const topHtml = renderPortfolioSummaryCard(renderTrendGraphPanel("전체계좌"), "trend-top-card");
 
   const accountHtml = accountNames()
     .map((a, i) => renderAccountSection(a, renderTrendAccountContent(a), i + 1))
     .join("");
 
+  return modeHtml + topHtml + accountHtml;
+}
+
+
+function renderTrendModeControls() {
+  const mode = state.trendMode || "trend";
+  const isHistory = mode !== "trend";
+  const dateText = formatHistoryDateLabel_(state.trendHistoryDate || latestSnapshotDate_());
+
+  return `
+    <div class="trend-mode-bar">
+      <button class="trend-mode-btn ${mode === "trend" ? "active" : ""}" data-trend-mode="trend" type="button">추이</button>
+      <button class="trend-mode-btn ${mode === "historyAsset" ? "active" : ""}" data-trend-mode="historyAsset" type="button">과거자산</button>
+      <button class="trend-mode-btn ${mode === "historyWeight" ? "active" : ""}" data-trend-mode="historyWeight" type="button">과거비중</button>
+      ${isHistory ? `
+        <button class="trend-date-nav" data-history-date-step="-1" type="button">◀</button>
+        <span class="trend-history-date">${dateText}</span>
+        <button class="trend-date-nav" data-history-date-step="1" type="button">▶</button>
+      ` : ""}
+    </div>
+  `;
+}
+
+function renderHistoricalAssetView() {
+  const detail = snapshotDetailOrEmpty_();
+  if (!detail) return `<div class="loading-screen">과거 스냅샷을 선택하세요.</div>`;
+
+  const topHtml = renderHistoricalPortfolioSummaryCard(
+    "전체계좌",
+    renderHistoricalAssetAccountDetails("전체계좌"),
+    "asset-top-card"
+  );
+
+  const accountHtml = historicalAccountNames_()
+    .map((a, i) => renderAccountSection(a, renderHistoricalAssetAccountContent(a), i + 1))
+    .join("");
+
   return topHtml + accountHtml;
 }
+
+function renderHistoricalWeightView() {
+  const detail = snapshotDetailOrEmpty_();
+  if (!detail) return `<div class="loading-screen">과거 스냅샷을 선택하세요.</div>`;
+
+  const total = historicalSummary_("전체계좌").total;
+  const symbolColors = buildHistoricalSymbolColorMap_(historicalItemsFor_("전체계좌"));
+
+  const accItems = historicalAccountNames_().map((name, idx) => {
+    const v = historicalSummary_(name).total;
+    return { name, valueKrw: v, weight: total ? v / total : 0, color: accountColor(name, idx) };
+  });
+
+  const topHtml = renderHistoricalPortfolioSummaryCard(
+    "전체계좌",
+    renderStackedBar(accItems) + renderAccountWeightList(accItems),
+    "weight-top-card"
+  );
+
+  const sections = [
+    renderAccountSection(
+      "전체계좌",
+      renderWeightBarLayout(groupSmall(historicalItemsFor_("전체계좌").filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
+      0
+    )
+  ];
+
+  historicalAccountNames_().forEach((a, i) => {
+    sections.push(renderAccountSection(
+      a,
+      renderWeightBarLayout(groupSmall(historicalItemsFor_(a).filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
+      i + 1
+    ));
+  });
+
+  return topHtml + sections.join("");
+}
+
+function renderHistoricalPortfolioSummaryCard(account, extraHtml = "", className = "") {
+  const s = historicalSummary_(account);
+
+  return `
+    <section class="portfolio-summary-card ${className}">
+      <div class="top-card-title">${account === "전체계좌" ? "TOTAL PORTFOLIO" : escapeHtml(account)}</div>
+      <div class="top-card-body">
+        <div>
+          <div class="amount-main">${formatWon(s.total)}</div>
+          <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+        </div>
+        ${renderProfitList(s)}
+      </div>
+      ${extraHtml ? `<div class="portfolio-summary-extra">${extraHtml}</div>` : ""}
+    </section>
+  `;
+}
+
+function renderHistoricalAssetAccountContent(account) {
+  const s = historicalSummary_(account);
+  return `
+    <div class="account-summary">
+      <div>
+        <div class="amount-main">${formatWon(s.total)}</div>
+        <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+      </div>
+      ${renderProfitList(s)}
+    </div>
+    ${renderHistoricalAssetAccountDetails(account)}
+  `;
+}
+
+function renderHistoricalAssetAccountDetails(account) {
+  const items = historicalItemsFor_(account);
+  const inv = investments(items);
+  const cash = cashItems(items);
+  const invValue = sum(inv, "valueKrw");
+  const cashValue = sum(cash, "valueKrw");
+  const total = invValue + cashValue;
+  const invRate = total ? invValue / total : 0;
+  const cashRate = total ? cashValue / total : 0;
+
+  return `
+    <div class="asset-mix">
+      <div class="mix-legend">
+        <span class="mix-stock"><i class="legend-dot"></i>주식 ${formatWon(invValue)} (${formatPlainRate(invRate)})</span>
+        <span class="mix-cash"><i class="legend-dot"></i>예수금 ${formatWon(cashValue)} (${formatPlainRate(cashRate)})</span>
+      </div>
+      <div class="mix-bar">
+        <div class="stock" style="width:${invRate * 100}%"></div>
+        <div class="cash" style="width:${cashRate * 100}%"></div>
+      </div>
+    </div>
+
+    ${inv.map(renderAssetRow).join("")}
+    ${renderCashSummaryRow(cash)}
+  `;
+}
+
+
+function buildSnapshotDetailFromCachedSnapshots_(requestedDate = "") {
+  const normalized = (state.data?.snapshots || [])
+    .map(normalizeSnapshotDetailFromCache_)
+    .filter(Boolean);
+
+  const availableDates = Array.from(new Set(normalized.map(r => r.date))).sort();
+  if (!availableDates.length) {
+    return {
+      ok: true,
+      date: "",
+      availableDates: [],
+      total: null,
+      accounts: [],
+      holdings: []
+    };
+  }
+
+  const date = requestedDate && availableDates.includes(requestedDate)
+    ? requestedDate
+    : availableDates[availableDates.length - 1];
+
+  const rows = normalized.filter(r => r.date === date);
+  const totalRow = rows.find(r => r.scope === "TOTAL") || null;
+  const accountRows = rows.filter(r => r.scope === "ACCOUNT");
+  const holdings = rows.filter(r => r.scope === "SYMBOL");
+
+  return {
+    ok: true,
+    date,
+    availableDates,
+    total: totalRow ? totalRow.summary : null,
+    accounts: accountRows.map(r => ({
+      account: r.account,
+      accountNo: r.accountNo,
+      summary: r.summary
+    })),
+    holdings
+  };
+}
+
+function normalizeSnapshotDetailFromCache_(r) {
+  if (!r) return null;
+  const date = String(r.date || r.baseDate || r["기준일"] || r["날짜"] || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return null;
+
+  const scope = String(r.scope || r["범위"] || "").toUpperCase();
+  if (!scope) return null;
+
+  const accountNo = String(r.accountNo || r.accountNumber || r["계좌번호"] || "").trim();
+  const accountName = String(r.account || r["계좌"] || "").trim();
+  const account = accountNo && accountName && !String(accountName).startsWith(accountNo + " ")
+    ? `${accountNo} ${accountName}`
+    : accountName;
+
+  const total = Number(r.totalAsset ?? r.valueKrw ?? r.valueKRW ?? r["평가금액_KRW"] ?? r["평가금액"] ?? 0);
+  const principalKrw = Number(r.principalKrw ?? r.principal ?? r["평가원금_KRW"] ?? r["평가원금"] ?? 0);
+  const basis = Number(r.basis ?? r.depositPrincipal ?? r["입금원금_KRW"] ?? principalKrw ?? 0);
+  const evalProfit = Number(r.evalProfit ?? r.profit ?? r["평가손익_KRW"] ?? (total - principalKrw));
+  const evalProfitRate = Number(r.evalProfitRate ?? r.profitRate ?? r["평가수익률"] ?? (principalKrw ? evalProfit / principalKrw : 0));
+  const accountProfit = Number(r.accountProfit ?? r["계좌수익_KRW"] ?? (total - basis));
+  const accountProfitRate = Number(r.accountProfitRate ?? r["계좌수익률"] ?? (basis ? accountProfit / basis : 0));
+  const dayProfit = Number(r.dayProfit ?? r["일간손익_KRW"] ?? 0);
+  const dayProfitRate = Number(r.dayProfitRate ?? r["일간수익률"] ?? 0);
+
+  if (scope === "TOTAL" || scope === "ACCOUNT") {
+    return {
+      date,
+      scope,
+      accountNo,
+      account,
+      summary: {
+        total,
+        principalKrw,
+        evalProfit,
+        evalProfitRate,
+        basis,
+        accountProfit,
+        accountProfitRate,
+        dayProfit,
+        dayProfitRate
+      }
+    };
+  }
+
+  if (scope === "SYMBOL") {
+    const symbol = String(r.symbol || r["종목코드"] || "").trim();
+    const currency = String(r.currency || r["통화"] || "KRW").toUpperCase();
+    const quantity = Number(r.quantity ?? r["수량"] ?? 0);
+    const avgPrice = Number(r.avgPrice ?? r["평균단가"] ?? 0);
+    const currentPrice = Number(r.currentPrice ?? r["현재가"] ?? 0);
+    const fxRate = Number(r.fxRate ?? r["환율"] ?? (currency === "USD" ? 0 : 1));
+
+    return {
+      date,
+      scope,
+      account,
+      accountNo,
+      symbol,
+      name: String(r.name || r["종목명"] || symbol).trim(),
+      exchange: String(r.exchange || r["거래소"] || "").trim(),
+      assetType: String(r.assetType || r["자산구분"] || "").trim(),
+      currency,
+      quantity,
+      avgPrice,
+      currentPrice,
+      dayChangeAmount: Number(r.dayChangeAmount ?? r["일간등락금액"] ?? 0),
+      dayChangeRate: dayProfitRate,
+      fxRate,
+      valueKrw: total,
+      principal: Number(r.principal ?? r["평가원금"] ?? avgPrice * quantity),
+      principalKrw,
+      profit: evalProfit,
+      profitRate: evalProfitRate,
+      dayProfit,
+      dayProfitRate
+    };
+  }
+
+  return null;
+}
+
+function snapshotDetailOrEmpty_() {
+  return state.snapshotDetail && state.snapshotDetail.holdings ? state.snapshotDetail : null;
+}
+
+function historicalAccountNames_() {
+  const detail = snapshotDetailOrEmpty_();
+  if (!detail) return [];
+
+  const names = [];
+  (detail.accounts || []).forEach(a => {
+    if (a.account && !names.includes(a.account)) names.push(a.account);
+  });
+
+  (detail.holdings || []).forEach(h => {
+    if (h.account && !names.includes(h.account)) names.push(h.account);
+  });
+
+  return names;
+}
+
+function historicalItemsFor_(account) {
+  const detail = snapshotDetailOrEmpty_();
+  const items = detail?.holdings || [];
+
+  if (account === "전체계좌") return aggregateBySymbol(items);
+  return items.filter(h => h.account === account);
+}
+
+function historicalSummary_(account) {
+  const detail = snapshotDetailOrEmpty_();
+
+  if (!detail) {
+    return {
+      total: 0,
+      principalKrw: 0,
+      evalProfit: 0,
+      evalProfitRate: 0,
+      basis: 0,
+      accountProfit: 0,
+      accountProfitRate: 0,
+      dayProfit: 0,
+      dayProfitRate: 0
+    };
+  }
+
+  if (account === "전체계좌" && detail.total) return normalizeSummaryForClient_(detail.total);
+
+  const found = (detail.accounts || []).find(a => a.account === account);
+  if (found?.summary) return normalizeSummaryForClient_(found.summary);
+
+  const items = historicalItemsFor_(account);
+  const total = sum(items, "valueKrw");
+  const principalKrw = sum(items, "principalKrw");
+  const evalProfit = total - principalKrw;
+  const day = dayProfit(items);
+  const basis = principalKrw;
+
+  return {
+    total,
+    principalKrw,
+    evalProfit,
+    evalProfitRate: principalKrw ? evalProfit / principalKrw : 0,
+    basis,
+    accountProfit: total - basis,
+    accountProfitRate: basis ? (total - basis) / basis : 0,
+    dayProfit: day.amount,
+    dayProfitRate: day.rate
+  };
+}
+
+function normalizeSummaryForClient_(s) {
+  const total = Number(s.total || 0);
+  const principalKrw = Number(s.principalKrw || 0);
+  const evalProfit = s.evalProfit !== undefined ? Number(s.evalProfit || 0) : total - principalKrw;
+  const basis = Number(s.basis || 0);
+  const accountProfit = s.accountProfit !== undefined ? Number(s.accountProfit || 0) : total - basis;
+
+  return {
+    total,
+    principalKrw,
+    evalProfit,
+    evalProfitRate: s.evalProfitRate !== undefined ? Number(s.evalProfitRate || 0) : (principalKrw ? evalProfit / principalKrw : 0),
+    basis,
+    accountProfit,
+    accountProfitRate: s.accountProfitRate !== undefined ? Number(s.accountProfitRate || 0) : (basis ? accountProfit / basis : 0),
+    dayProfit: Number(s.dayProfit || 0),
+    dayProfitRate: Number(s.dayProfitRate || 0)
+  };
+}
+
+function latestSnapshotDate_() {
+  const dates = snapshotAvailableDates_();
+  return dates[dates.length - 1] || todayKey();
+}
+
+function snapshotAvailableDates_() {
+  const fromDetail = state.snapshotDetail?.availableDates || [];
+  const fromSnapshots = (state.data?.snapshots || [])
+    .map(s => String(s.date || s.baseDate || s["기준일"] || "").slice(0, 10))
+    .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+
+  return Array.from(new Set([...fromSnapshots, ...fromDetail])).sort();
+}
+
+function adjacentSnapshotDate_(date, step) {
+  const dates = snapshotAvailableDates_();
+  if (!dates.length) return "";
+
+  const current = date || dates[dates.length - 1];
+  let idx = dates.indexOf(current);
+
+  if (idx < 0) {
+    idx = dates.findIndex(d => d > current);
+    if (idx < 0) idx = dates.length - 1;
+  }
+
+  const next = Math.max(0, Math.min(dates.length - 1, idx + step));
+  return dates[next];
+}
+
+function formatHistoryDateLabel_(date) {
+  const d = parseDateKey(date || todayKey());
+  return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
+}
+
+function buildHistoricalSymbolColorMap_(items) {
+  const map = {};
+  const list = aggregateBySymbol(items || [])
+    .filter(i => !isCash(i.symbol))
+    .filter(i => Number(i.valueKrw || 0) > 0)
+    .sort((a, b) => Number(b.valueKrw || 0) - Number(a.valueKrw || 0));
+
+  list.forEach((item, idx) => {
+    map[String(item.symbol)] = symbolChartColor(idx);
+  });
+
+  return map;
+}
+
 
 function renderTrendAccountContent(account) {
   const s = summary(account);
@@ -1220,6 +1948,31 @@ function renderTrendGraphPanel(account) {
 }
 
 function attachTrendEvents() {
+  document.querySelectorAll("[data-trend-mode]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const mode = btn.dataset.trendMode || "trend";
+      state.trendMode = mode;
+      state.touchedTrendPoint = null;
+
+      if (mode !== "trend") {
+        await loadSnapshotDetailForDate(state.trendHistoryDate || latestSnapshotDate_());
+      }
+
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-history-date-step]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const step = Number(btn.dataset.historyDateStep || 0);
+      const nextDate = adjacentSnapshotDate_(state.trendHistoryDate || latestSnapshotDate_(), step);
+      if (!nextDate) return;
+
+      await loadSnapshotDetailForDate(nextDate);
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-trend-period]").forEach(btn => {
     btn.addEventListener("click", () => {
       const account = btn.dataset.trendAccount || "전체계좌";
@@ -1490,8 +2243,10 @@ function normalizeTrendSnapshot(r) {
   const principal = Number(r.principal ?? r.basis ?? r.principalKrw ?? r["입금원금_KRW"] ?? r["평가원금_KRW"] ?? 0);
   const profit = Number(r.profit ?? r.accountProfit ?? r["계좌수익_KRW"] ?? (totalAsset - principal));
   const profitRate = Number(r.profitRate ?? r.accountProfitRate ?? r["계좌수익률"] ?? (principal ? profit / principal : 0));
+  const dayProfit = Number(r.dayProfit ?? r["일간손익_KRW"] ?? 0);
+  const dayProfitRate = Number(r.dayProfitRate ?? r["일간수익률"] ?? 0);
 
-  return { date, scope, accountNo, account, totalAsset, principal, profit, profitRate };
+  return { date, scope, accountNo, account, totalAsset, principal, profit, profitRate, dayProfit, dayProfitRate };
 }
 
 function currentTrendPoint(account) {
@@ -1504,6 +2259,8 @@ function currentTrendPoint(account) {
     principal: s.basis,
     profit: s.accountProfit,
     profitRate: s.accountProfitRate,
+    dayProfit: s.dayProfit,
+    dayProfitRate: s.dayProfitRate,
     isLive: true
   };
 }
