@@ -289,6 +289,27 @@
   --font-55-weight: 800;
   --font-55-color: #666;
   --font-55-letter-spacing: -0.0px;
+
+
+  /* FONT 61: 관심종목 - 종목명 */
+--font-61-family: var(--font-family-base);
+--font-61-size: 14px;
+--font-61-weight: 700;
+--font-61-color: #333;
+--font-61-letter-spacing: -0.4px;
+
+/* FONT 62: 관심종목 - 현재가 */
+--font-62-family: var(--font-family-base);
+--font-62-size: 14px;
+--font-62-weight: 700;
+--font-62-color: #111;
+--font-62-letter-spacing: -0.6px;
+
+/* FONT 63: 관심종목 - 등락액/등락률 */
+--font-63-family: var(--font-family-base);
+--font-63-size: 11px;
+--font-63-weight: 600;
+--font-63-letter-spacing: -0.7px;
 }
 
 
@@ -1445,17 +1466,18 @@ button { font-family: inherit; }
   border: var(--box-border-width) solid var(--color-box-border);
   border-radius: var(--box-radius);
   background: #fff;
-  padding: 7px 20px 90px 20px; /* 여백조절 관심종목 리스트 박스 내부 위/좌우/아래 */
-  margin: 4px 0 16px;
+  padding: 7px 10px 7px 10px; /* 여백조절 관심종목 리스트 박스 내부 위/우/아래/좌 */
+  margin: 0px 0 10px;        /* 박스 바깥여백 위/*/
   min-height: 70vh;
 }
 
 .watchlist-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 100px 120px; /* 여백조절 관심종목 3열 각각의 너비 */
+  grid-template-columns: minmax(0, 1fr) 80px 100px; /* 여백조절 관심종목 3열 각각의 너비 */
   gap: 5px;
   align-items: center;
-  padding: var(--row-padding-y) 0;
+  /*padding: var(--row-padding-y) 0;*/
+  padding: 5px 0px;    /*  관심종목끼리 행간겨백, 좌우여백 */
   border-bottom: 1px solid var(--color-line);
 }
 
@@ -1470,6 +1492,41 @@ button { font-family: inherit; }
 
 .watchlist-empty {
   padding: 18px 0;
+}
+
+.watchlist-row > .stock-name {
+  font-family: var(--font-61-family);
+  font-size: var(--font-61-size);
+  font-weight: var(--font-61-weight);
+  color: var(--font-61-color);
+  letter-spacing: var(--font-61-letter-spacing);
+
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-line-clamp: unset;
+  -webkit-box-orient: initial;
+}
+
+.watchlist-row .watchlist-price.current-price {
+  font-family: var(--font-62-family);
+  font-size: var(--font-62-size);
+  font-weight: var(--font-62-weight);
+  color: var(--font-62-color);
+  letter-spacing: var(--font-62-letter-spacing);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.watchlist-row .watchlist-change.day-change {
+  font-family: var(--font-63-family);
+  font-size: var(--font-63-size);
+  font-weight: var(--font-63-weight);
+  letter-spacing: var(--font-63-letter-spacing);
+  text-align: right;
+  white-space: nowrap;
 }
 
 
