@@ -41,6 +41,7 @@ const NAV_ICONS = {
   asset: { off: "./assets/icons/nav/asset-off.png", on: "./assets/icons/nav/asset-on.png" },
   weight: { off: "./assets/icons/nav/weight-off.png", on: "./assets/icons/nav/weight-on.png" },
   trend: { off: "./assets/icons/nav/trend-off.png", on: "./assets/icons/nav/trend-on.png" },
+  watchlist: { off: "./assets/icons/nav/watchlist-off.png", on: "./assets/icons/nav/watchlist-on.png" },
   sync: { off: "./assets/icons/nav/refreshtotal-off.png", on: "./assets/icons/nav/refreshtotal-on.png" },
   refresh: { off: "./assets/icons/nav/refresh-off.png", on: "./assets/icons/nav/refresh-on.png" }
 };
@@ -176,10 +177,11 @@ async function loadJsonpAction_(action, params = {}) {
 async function fetchBaseDataFromGoogle_(addProgress) {
   addProgress("AccountPositions를 구글시트로부터 읽고 있습니다.");
   addProgress("Symbols를 구글시트로부터 읽고 있습니다.");
+  addProgress("Watchlists를 구글시트로부터 읽고 있습니다.");
 
   const data = await loadJsonpAction_("baseData");
 
-  addProgress("AccountPositions와 Symbols를 IndexedDB에 저장하고 있습니다.");
+  addProgress("AccountPositions, Symbols, Watchlists를 IndexedDB에 저장하고 있습니다.");
   const base = normalizeBaseData_(data);
   await idbSet_(LOCAL_DB.keys.baseData, {
     savedAt: new Date().toISOString(),
@@ -193,6 +195,7 @@ async function fetchBaseDataFromGoogle_(addProgress) {
 async function readBaseDataFromIndexedDb_(addProgress) {
   addProgress("AccountPositions를 IndexedDB로부터 읽고 있습니다.");
   addProgress("Symbols를 IndexedDB로부터 읽고 있습니다.");
+  addProgress("Watchlists를 IndexedDB로부터 읽고 있습니다.");
 
   const cached = await idbGet_(LOCAL_DB.keys.baseData);
   if (!cached?.base) throw new Error("IndexedDB에 AccountPositions/Symbols 캐시가 없습니다.");
@@ -233,22 +236,47 @@ async function readSnapshotsFromIndexedDb_(addProgress) {
 function normalizeBaseData_(data) {
   const positions = data.positions || data.accountPositions || [];
   const symbols = data.symbols || {};
+  const watchlists = normalizeWatchlists_(data.watchlists || data.watchlist || [], symbols);
   const accountBasisMap = data.accountBasisMap || buildAccountBasisMapFromPositions_(positions);
   const totalBasis = data.totalBasis !== undefined
     ? Number(data.totalBasis || 0)
     : Object.values(accountBasisMap).reduce((sum, n) => sum + Number(n || 0), 0);
   const accounts = data.accounts || getAccountsFromPositions_(positions);
-  const quoteTargets = data.quoteTargets || collectQuoteTargetsFromBase_(positions, symbols);
+  const quoteTargets = data.quoteTargets || collectQuoteTargetsFromBase_(positions, symbols, watchlists);
 
   return {
     generatedAt: data.generatedAt || new Date().toISOString(),
     positions,
     symbols,
+    watchlists,
     accounts,
     totalBasis,
     accountBasisMap,
     quoteTargets
   };
+}
+
+function normalizeWatchlists_(watchlists, symbols = {}) {
+  const seen = {};
+  return (watchlists || [])
+    .map(item => {
+      const symbol = String(item.symbol || item["종목코드"] || "").trim();
+      if (!symbol || isCash(symbol) || seen[symbol]) return null;
+
+      const meta = symbols[symbol] || fallbackSymbolClient_(symbol);
+      seen[symbol] = true;
+
+      return {
+        ...meta,
+        ...item,
+        symbol,
+        name: item.name || item["종목명"] || meta.name || symbol,
+        exchange: String(item.exchange || item["거래소"] || meta.exchange || "").trim().toUpperCase(),
+        assetType: item.assetType || item["자산구분"] || meta.assetType || "",
+        currency: String(item.currency || item["통화"] || meta.currency || "KRW").trim().toUpperCase()
+      };
+    })
+    .filter(Boolean);
 }
 
 function buildAccountBasisMapFromPositions_(positions) {
@@ -283,13 +311,20 @@ function fallbackSymbolClient_(symbol) {
   };
 }
 
-function collectQuoteTargetsFromBase_(positions, symbols) {
+function collectQuoteTargetsFromBase_(positions, symbols, watchlists = []) {
   const seen = {};
   const list = [];
-  (positions || []).forEach(p => {
-    const symbol = String(p.symbol || "").trim();
+
+  const addTarget = item => {
+    const symbol = String(item?.symbol || "").trim();
     if (!symbol || symbol === "원금" || isCash(symbol) || seen[symbol]) return;
-    const meta = symbols[symbol] || fallbackSymbolClient_(symbol);
+
+    const meta = {
+      ...(symbols[symbol] || fallbackSymbolClient_(symbol)),
+      ...(item || {}),
+      symbol
+    };
+
     seen[symbol] = true;
     list.push({
       symbol,
@@ -298,7 +333,11 @@ function collectQuoteTargetsFromBase_(positions, symbols) {
       assetType: meta.assetType || "",
       currency: meta.currency || "KRW"
     });
-  });
+  };
+
+  (positions || []).forEach(addTarget);
+  (watchlists || []).forEach(addTarget);
+
   return list;
 }
 
@@ -366,14 +405,56 @@ function buildHoldingsFromBase_(base, quoteData = {}) {
     .filter(x => Math.abs(Number(x.quantity || 0)) > 0.000001);
 }
 
+function buildWatchlistItemsFromBase_(base, quoteData = {}) {
+  const symbols = base.symbols || {};
+  const watchlists = base.watchlists || [];
+  const quotes = quoteData.quotes || {};
+  const usdKrw = Number(quoteData.usdKrw || base.usdKrw || 0);
+
+  return (watchlists || []).map(item => {
+    const symbol = String(item.symbol || "").trim();
+    const meta = {
+      ...(symbols[symbol] || fallbackSymbolClient_(symbol)),
+      ...(item || {}),
+      symbol
+    };
+
+    const quote = quotes[symbol] || {};
+    const currency = String(meta.currency || "KRW").toUpperCase();
+
+    let fxRate = currency === "USD"
+      ? Number(quote.fxRate || usdKrw || meta.fxRate || 0)
+      : 1;
+    if (!fxRate) fxRate = Number(meta.fxRate || 1);
+
+    return {
+      symbol,
+      name: meta.name || symbol,
+      exchange: meta.exchange || "",
+      assetType: meta.assetType || "",
+      currency,
+      currentPrice: Number(quote.currentPrice || 0),
+      dayChangeAmount: Number(quote.dayChangeAmount || 0),
+      dayChangeRate: Number(quote.dayChangeRate || 0),
+      fxRate
+    };
+  }).filter(item => item.symbol);
+}
+
 function buildDataFromBase_(base, snapshots = [], quoteData = {}) {
   const holdings = buildHoldingsFromBase_(base, quoteData);
+  const watchlists = normalizeWatchlists_(base.watchlists || [], base.symbols || {});
+  const quoteTargets = base.quoteTargets || collectQuoteTargetsFromBase_(base.positions || [], base.symbols || {}, watchlists);
+  const watchlistItems = buildWatchlistItemsFromBase_({ ...base, watchlists }, quoteData);
+
   return {
     generatedAt: quoteData.generatedAt || base.generatedAt || new Date().toISOString(),
     usdKrw: Number(quoteData.usdKrw || base.usdKrw || 0),
     positions: base.positions || [],
     symbols: base.symbols || {},
-    quoteTargets: base.quoteTargets || collectQuoteTargetsFromBase_(base.positions || [], base.symbols || {}),
+    watchlists,
+    watchlistItems,
+    quoteTargets,
     accounts: base.accounts || getAccountsFromPositions_(base.positions || []),
     holdings,
     totalBasis: Number(base.totalBasis || 0),
@@ -384,7 +465,11 @@ function buildDataFromBase_(base, snapshots = [], quoteData = {}) {
 }
 
 async function fetchQuotesForBase_(base, addProgress) {
-  const targets = base.quoteTargets || collectQuoteTargetsFromBase_(base.positions || [], base.symbols || {});
+  /*
+    시세 조회 대상(보유종목 + 관심종목)은 baseData 동기화 시 GAS 쪽 CacheService에도 저장됩니다.
+    새로고침 때 앱이 긴 종목 목록을 JSONP URL에 실어 보내지 않도록, 여기서는 짧은 action만 호출합니다.
+    GAS 캐시가 만료되었으면 GAS가 시트를 다시 읽어 quoteTargets를 재생성합니다.
+  */
   addProgress("한투 API로 시세를 갱신하고 있습니다.");
 
   if (!CONFIG.apiUrl) {
@@ -397,7 +482,7 @@ async function fetchQuotesForBase_(base, addProgress) {
     };
   }
 
-  return await loadJsonpAction_("quotes", { symbols: targets });
+  return await loadJsonpAction_("quotesCached");
 }
 
 async function loadAppData_(mode = "startup") {
@@ -437,6 +522,7 @@ async function loadAppData_(mode = "startup") {
           currency: h.currency
         }])),
         accounts: MOCK_DATA.accounts,
+        watchlists: MOCK_DATA.watchlists || [],
         totalBasis: MOCK_DATA.totalBasis,
         accountBasisMap: MOCK_DATA.accountBasisMap
       });
@@ -514,6 +600,12 @@ const MOCK_DATA = {
     cash("신랑-일반1", "CASH_USD", "달러 현금", "USD", 10000, 1400),
     h("신랑-일반2", "457790", "PLUS 태양광&ESS", "KRX", "국내ETF", "KRW", 55000, 1000, 44700, -400, -0.009, 1),
     h("신랑-일반2", "426030", "TIME 미국나스닥100액티브", "KRX", "국내ETF", "KRW", 34000, 20, 46750, 750, 0.043, 1)
+  ],
+  watchlists: [
+    { symbol: "QLD", name: "ProShares Ultra QQQ", exchange: "AMS", assetType: "미국ETF", currency: "USD" },
+    { symbol: "VOO", name: "Vanguard 500 Index Fund", exchange: "AMS", assetType: "미국ETF", currency: "USD" },
+    { symbol: "000660", name: "SK하이닉스", exchange: "KRX", assetType: "국내주식", currency: "KRW" },
+    { symbol: "457790", name: "PLUS 태양광&ESS", exchange: "KRX", assetType: "국내ETF", currency: "KRW" }
   ],
   snapshots: makeMockSnapshots()
 };
@@ -695,8 +787,7 @@ async function refreshQuotesOnly() {
 
 function quoteTargetsFromCurrentHoldings() {
   const map = {};
-
-  holdings().forEach(i => {
+  const add = i => {
     const symbol = String(i.symbol || "").trim();
     if (!symbol || isCash(symbol) || map[symbol]) return;
 
@@ -707,7 +798,10 @@ function quoteTargetsFromCurrentHoldings() {
       assetType: i.assetType || "",
       currency: i.currency || "KRW"
     };
-  });
+  };
+
+  holdings().forEach(add);
+  (state.data?.watchlists || []).forEach(add);
 
   return Object.values(map);
 }
@@ -957,6 +1051,7 @@ function render() {
   if (state.activeTab === "quote") screen.innerHTML = renderTopCard() + renderQuoteTab();
   if (state.activeTab === "asset") screen.innerHTML = renderAssetTab();
   if (state.activeTab === "weight") screen.innerHTML = renderWeightTab();
+  if (state.activeTab === "watchlist") screen.innerHTML = renderWatchlistTab();
   if (state.activeTab === "trend") {
     screen.innerHTML = renderTrendTab();
     attachTrendEvents();
@@ -1176,6 +1271,40 @@ function renderQuoteRow(i) {
         <span class="info-pill ${avgC}">${formatPrice(i.avgPrice, i.currency).replace("$ ", "")} (${formatRate(i.profitRate)}) <span class="small-tag">평</span></span>
         <span class="info-pill">${formatQty(i.quantity, i.symbol)}</span>
       </div>
+    </div>
+  `;
+}
+
+/* =========================================================
+   Watchlist tab
+========================================================= */
+
+function watchlistItems() {
+  return state.data?.watchlistItems || [];
+}
+
+function renderWatchlistTab() {
+  return renderTopCard() + `
+    <section class="watchlist-card">
+      ${renderWatchlistRows()}
+    </section>
+  `;
+}
+
+function renderWatchlistRows() {
+  const items = watchlistItems();
+  if (!items.length) return `<div class="muted watchlist-empty">표시할 관심종목이 없습니다.</div>`;
+  return items.map(renderWatchlistRow).join("");
+}
+
+function renderWatchlistRow(i) {
+  const c = Number(i.dayChangeRate || 0) >= 0 ? "profit" : "loss";
+
+  return `
+    <div class="watchlist-row">
+      <div class="stock-name">${escapeHtml(i.name || i.symbol)}</div>
+      <div class="watchlist-price current-price">${formatPrice(i.currentPrice, i.currency)}</div>
+      <div class="watchlist-change day-change ${c}">${formatChange(i.dayChangeAmount, i.currency)} (${formatPlainRate2(Math.abs(i.dayChangeRate))})</div>
     </div>
   `;
 }
@@ -1506,18 +1635,27 @@ function renderTrendTab() {
 function renderTrendModeControls() {
   const mode = state.trendMode || "trend";
   const isHistory = mode !== "trend";
-  const dateText = formatHistoryDateLabel_(state.trendHistoryDate || latestSnapshotDate_());
+  const currentDate = state.trendHistoryDate || latestSnapshotDate_();
+  const dateText = formatHistoryShortDateLabel_(currentDate);
+  const range = historyDatePickerRange_();
+  const pickerValue = historyDateForPicker_(currentDate, range);
+  const minAttr = range.minDate ? `min="${range.minDate}"` : "";
+  const maxAttr = range.maxDate ? `max="${range.maxDate}"` : "";
 
   return `
     <div class="trend-mode-bar">
-      <button class="trend-mode-btn ${mode === "trend" ? "active" : ""}" data-trend-mode="trend" type="button">추이</button>
-      <button class="trend-mode-btn ${mode === "historyAsset" ? "active" : ""}" data-trend-mode="historyAsset" type="button">과거자산</button>
-      <button class="trend-mode-btn ${mode === "historyWeight" ? "active" : ""}" data-trend-mode="historyWeight" type="button">과거비중</button>
-      ${isHistory ? `
-        <button class="trend-date-nav" data-history-date-step="-1" type="button">◀</button>
-        <span class="trend-history-date">${dateText}</span>
-        <button class="trend-date-nav" data-history-date-step="1" type="button">▶</button>
-      ` : ""}
+      <div class="trend-mode-left">
+        <button class="trend-mode-btn ${mode === "trend" ? "active" : ""}" data-trend-mode="trend" type="button">추이</button>
+        <button class="trend-mode-btn ${mode === "historyAsset" ? "active" : ""}" data-trend-mode="historyAsset" type="button">과거자산</button>
+        <button class="trend-mode-btn ${mode === "historyWeight" ? "active" : ""}" data-trend-mode="historyWeight" type="button">과거비중</button>
+      </div>
+
+      <div class="trend-mode-right ${isHistory ? "" : "is-hidden"}" aria-hidden="${isHistory ? "false" : "true"}">
+        <button class="trend-date-nav" data-history-date-step="-1" type="button" ${isHistory ? "" : 'tabindex="-1"'}>◀</button>
+        <button class="trend-history-date" data-history-date-picker type="button" ${isHistory ? "" : 'tabindex="-1"'}>${dateText}</button>
+        <button class="trend-date-nav" data-history-date-step="1" type="button" ${isHistory ? "" : 'tabindex="-1"'}>▶</button>
+        <input class="trend-history-date-input" data-history-date-input type="date" ${minAttr} ${maxAttr} value="${pickerValue}" ${isHistory ? "" : 'tabindex="-1"'} />
+      </div>
     </div>
   `;
 }
@@ -1882,6 +2020,53 @@ function formatHistoryDateLabel_(date) {
   return `${d.getFullYear()}년 ${d.getMonth() + 1}월 ${d.getDate()}일`;
 }
 
+function formatHistoryShortDateLabel_(date) {
+  const d = parseDateKey(date || todayKey());
+  return `${String(d.getFullYear()).slice(2)}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
+}
+
+
+function yesterdayKey_() {
+  return dateKey(addDays(startOfDay(new Date()), -1));
+}
+
+function historyDatePickerRange_() {
+  const dates = snapshotAvailableDates_();
+  if (!dates.length) {
+    return { minDate: "", maxDate: "", latestDate: "" };
+  }
+
+  const minDate = dates[0];
+  const latestDate = dates[dates.length - 1];
+  const yesterday = yesterdayKey_();
+  let maxDate = latestDate < yesterday ? latestDate : yesterday;
+
+  if (maxDate < minDate) maxDate = latestDate;
+
+  return { minDate, maxDate, latestDate };
+}
+
+function historyDateForPicker_(date, range = historyDatePickerRange_()) {
+  let d = String(date || range.latestDate || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) d = range.latestDate || "";
+  if (range.minDate && d < range.minDate) d = range.minDate;
+  if (range.maxDate && d > range.maxDate) d = range.maxDate;
+  return d;
+}
+
+function closestSnapshotDateOnOrBefore_(date) {
+  const target = String(date || "").slice(0, 10);
+  const dates = snapshotAvailableDates_();
+  if (!dates.length || !/^\d{4}-\d{2}-\d{2}$/.test(target)) return "";
+
+  let found = "";
+  dates.forEach(d => {
+    if (d <= target) found = d;
+  });
+
+  return found || dates[0];
+}
+
 function buildHistoricalSymbolColorMap_(items) {
   const map = {};
   const list = aggregateBySymbol(items || [])
@@ -1964,8 +2149,45 @@ function attachTrendEvents() {
 
   document.querySelectorAll("[data-history-date-step]").forEach(btn => {
     btn.addEventListener("click", async () => {
+      btn.classList.add("is-pressed");
+
       const step = Number(btn.dataset.historyDateStep || 0);
       const nextDate = adjacentSnapshotDate_(state.trendHistoryDate || latestSnapshotDate_(), step);
+
+      if (!nextDate) {
+        setTimeout(() => btn.classList.remove("is-pressed"), 140);
+        return;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 90));
+      await loadSnapshotDetailForDate(nextDate);
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-history-date-picker]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const input = btn.parentElement?.querySelector("[data-history-date-input]");
+      if (!input) return;
+
+      btn.classList.add("is-pressed");
+      setTimeout(() => btn.classList.remove("is-pressed"), 140);
+
+      if (typeof input.showPicker === "function") {
+        input.showPicker();
+      } else {
+        input.focus();
+        input.click();
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-history-date-input]").forEach(input => {
+    input.addEventListener("change", async () => {
+      const pickedDate = input.value;
+      if (!pickedDate) return;
+
+      const nextDate = closestSnapshotDateOnOrBefore_(pickedDate);
       if (!nextDate) return;
 
       await loadSnapshotDetailForDate(nextDate);

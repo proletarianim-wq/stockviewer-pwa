@@ -1199,19 +1199,91 @@ button { font-family: inherit; }
 
 
 
-/* 추이탭 상단 모드 선택: 추이 / 과거자산 / 과거비중 */
-.trend-mode-bar {
-  display: grid;
-  grid-template-columns: 1fr 1.25fr 1.25fr auto minmax(118px, auto) auto;
-  align-items: center;
-  gap: 0;
-  margin: 2px auto 12px;
-  padding: 5px;
-  width: min(100%, 660px);
-  background: #f1f3f5;
-  border-radius: 999px;
+/* 추이탭 상단 모드 선택: 추이 / 과거자산 / 과거비중
+   구조:
+   [추이][과거자산][과거비중]        [◀ YY.MM.DD ▶]
+
+   - 왼쪽 3개 메뉴는 한 그룹으로 고정
+   - 오른쪽 날짜 영역은 과거자산/과거비중에서만 표시
+   - 추이 모드에서는 날짜 영역을 숨기되, 공간은 유지
+   - 날짜 텍스트를 누르면 기본 달력(input[type=date])을 엽니다.
+*/
+:root {
+  /* 좌측 3개 메뉴 폭 */
+  --trend-mode-col-trend: 50px;
+  --trend-mode-col-history-asset: 75px;
+  --trend-mode-col-history-weight: 75px;
+
+  --trend-mode-left-width: calc(
+    var(--trend-mode-col-trend) +
+    var(--trend-mode-col-history-asset) +
+    var(--trend-mode-col-history-weight)
+  );
+
+  /* 우측 날짜 영역 폭: [◀][날짜][▶] */
+  --trend-mode-date-nav-width: 28px;
+  --trend-mode-date-width: 80px;
+
+  --trend-mode-right-width: calc(
+    var(--trend-mode-date-nav-width) +
+    var(--trend-mode-date-width) +
+    var(--trend-mode-date-nav-width)
+  );
 }
 
+/* 전체 상단 캡슐 */
+.trend-mode-bar {
+  display: grid;
+  grid-template-columns:
+    var(--trend-mode-left-width)
+    minmax(0, 1fr)
+    var(--trend-mode-right-width);
+  align-items: center;
+  gap: 0;
+  margin: 2px auto 5px;    /* 회색 캡슐 바깥 여백: 위/좌우/아래 */
+  padding: 5px;             /* 회색 캡슐 안쪽 여백 */
+  width: min(100%, 660px);  /* 전체 상단 캡슐의 최대 폭 */
+  background: #f1f3f5;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+/* 좌측 메뉴 그룹: [추이][과거자산][과거비중] */
+.trend-mode-left {
+  display: grid;
+  grid-template-columns:
+    var(--trend-mode-col-trend)
+    var(--trend-mode-col-history-asset)
+    var(--trend-mode-col-history-weight);
+  align-items: center;
+  justify-content: start;
+  min-width: 0;
+  margin-left: 5px;   /* 버튼들 좌측 여백 */
+}
+
+/* 우측 날짜 그룹: [◀][YY.MM.DD][▶] */
+.trend-mode-right {
+  grid-column: 3;
+  position: relative; /* 숨겨진 date input 위치 기준 */
+  display: grid;
+  grid-template-columns:
+    var(--trend-mode-date-nav-width)
+    var(--trend-mode-date-width)
+    var(--trend-mode-date-nav-width);
+  align-items: center;
+  justify-content: end;
+  min-width: 0;
+  transition: opacity 0.12s ease;
+}
+
+/* 추이 모드에서는 날짜 영역을 안 보이게 하되 공간은 유지 */
+.trend-mode-right.is-hidden {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 좌측 메뉴 버튼 + 날짜 이동 버튼 공통 */
 .trend-mode-btn,
 .trend-date-nav {
   border: 0;
@@ -1221,62 +1293,116 @@ button { font-family: inherit; }
   font-size: var(--font-51-size);
   font-weight: var(--font-51-weight);
   letter-spacing: var(--font-51-letter-spacing);
-  height: 34px;
+  height: 30px;         /* 작은 버튼 높이 */
   border-radius: 999px;
   line-height: 1;
   white-space: nowrap;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: clip;
 }
 
+/* 좌측 메뉴 버튼은 각 칸 전체 사용 */
+.trend-mode-btn {
+  width: 100%;
+  padding: 0;
+}
+
+/* 선택된 메뉴 */
 .trend-mode-btn.active {
   background: #ffffff;
   color: #111111;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.16);
 }
 
+/* 날짜 좌우 이동 버튼 */
 .trend-date-nav {
-  width: 32px;
+  width: 100%;
   padding: 0;
   font-size: 13px;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform 0.08s ease,
+    background-color 0.08s ease,
+    color 0.08s ease,
+    box-shadow 0.08s ease;
 }
 
+.trend-date-nav:active,
+.trend-date-nav.is-pressed,
+.trend-history-date:active,
+.trend-history-date.is-pressed {
+  transform: scale(0.82);
+  background: #ffffff;
+  color: #111111;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+}
+
+/* 날짜 텍스트 버튼 */
 .trend-history-date {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 118px;
+  width: 100%;
+  min-width: 0;
   height: 34px;
-  padding: 0 4px;
+  padding: 0 1px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
   color: #777;
   font-family: var(--font-51-family);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 900;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition:
+    transform 0.08s ease,
+    background-color 0.08s ease,
+    color 0.08s ease,
+    box-shadow 0.08s ease;
 }
 
-@media (max-width: 420px) {
+/* 기본 브라우저 달력용 숨김 input */
+.trend-history-date-input {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 아주 작은 화면용 압축 설정 */
+@media (max-width: 370px) {
+  :root {
+    --trend-mode-col-trend: 30px;
+    --trend-mode-col-history-asset: 55px;
+    --trend-mode-col-history-weight: 55px;
+    --trend-mode-date-nav-width: 18px;
+    --trend-mode-date-width: 70px;
+  }
+
   .trend-mode-bar {
-    grid-template-columns: 0.9fr 1.2fr 1.2fr auto minmax(95px, auto) auto;
     padding: 4px;
   }
 
   .trend-mode-btn,
   .trend-date-nav {
     height: 30px;
-    font-size: 12px;
-  }
-
-  .trend-history-date {
-    min-width: 95px;
-    height: 30px;
     font-size: 11px;
   }
 
-  .trend-date-nav {
-    width: 24px;
+  .trend-history-date {
+    height: 30px;
+    font-size: 10.5px;
   }
 }
-
-
 
 /* =========================================================
    DEBUG LOADING / PROGRESS
@@ -1309,6 +1435,44 @@ button { font-family: inherit; }
   font-weight: 900;
 }
 
+
+
+/* =========================================================
+   9-1. WATCHLIST TAB
+========================================================= */
+
+.watchlist-card {
+  border: var(--box-border-width) solid var(--color-box-border);
+  border-radius: var(--box-radius);
+  background: #fff;
+  padding: 7px 20px 90px 20px; /* 여백조절 관심종목 리스트 박스 내부 위/좌우/아래 */
+  margin: 4px 0 16px;
+  min-height: 70vh;
+}
+
+.watchlist-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px 120px; /* 여백조절 관심종목 3열 각각의 너비 */
+  gap: 5px;
+  align-items: center;
+  padding: var(--row-padding-y) 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.watchlist-row:last-child {
+  border-bottom: 0;
+}
+
+.watchlist-price,
+.watchlist-change {
+  text-align: right;
+}
+
+.watchlist-empty {
+  padding: 18px 0;
+}
+
+
 /* =========================================================
    9. BOTTOM NAVIGATION
 ========================================================= */
@@ -1321,7 +1485,7 @@ button { font-family: inherit; }
   height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
   padding: 5px 6px calc(6px + env(safe-area-inset-bottom));
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: 2px;
   background: var(--nav-bg);
   border-top: 1px solid var(--nav-border);
