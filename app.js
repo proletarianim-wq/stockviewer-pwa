@@ -464,13 +464,18 @@ function buildDataFromBase_(base, snapshots = [], quoteData = {}) {
   };
 }
 
-async function fetchQuotesForBase_(base, addProgress) {
+async function fetchQuotesForBase_(base, addProgress, scope = "all") {
   /*
-    시세 조회 대상(보유종목 + 관심종목)은 baseData 동기화 시 GAS 쪽 CacheService에도 저장됩니다.
-    새로고침 때 앱이 긴 종목 목록을 JSONP URL에 실어 보내지 않도록, 여기서는 짧은 action만 호출합니다.
-    GAS 캐시가 만료되었으면 GAS가 시트를 다시 읽어 quoteTargets를 재생성합니다.
+    시세 조회 대상은 baseData 동기화 시 GAS 쪽 CacheService에도 저장됩니다.
+    - scope="holdings": 보유종목만 갱신합니다. 일반 새로고침에서 사용합니다.
+    - scope="all": 보유종목 + 관심종목을 함께 갱신합니다. 앱 시작/동기화/관심종목 탭 새로고침에서 사용합니다.
+    앱이 긴 종목 목록을 JSONP URL에 실어 보내지 않도록 짧은 action + scope만 호출합니다.
   */
-  addProgress("한투 API로 시세를 갱신하고 있습니다.");
+  if (scope === "holdings") {
+    addProgress("한투 API로 보유종목 시세를 갱신하고 있습니다.");
+  } else {
+    addProgress("한투 API로 보유종목과 관심종목 시세를 갱신하고 있습니다.");
+  }
 
   if (!CONFIG.apiUrl) {
     await wait(250);
@@ -482,7 +487,7 @@ async function fetchQuotesForBase_(base, addProgress) {
     };
   }
 
-  return await loadJsonpAction_("quotesCached");
+  return await loadJsonpAction_("quotesCached", { scope });
 }
 
 async function loadAppData_(mode = "startup") {
@@ -532,7 +537,7 @@ async function loadAppData_(mode = "startup") {
     state.data = buildDataFromBase_(base, snapshots, {});
     state.snapshotsLoaded = true;
 
-    const quoteData = await fetchQuotesForBase_(base, addProgress);
+    const quoteData = await fetchQuotesForBase_(base, addProgress, "all");
     state.data = buildDataFromBase_(base, snapshots, quoteData);
 
     addProgress("화면을 갱신하고 있습니다.");
@@ -557,11 +562,18 @@ async function refreshFromLocalCache_() {
       snapshots = state.data?.snapshots || [];
     }
 
+    const previousData = state.data;
+    const refreshScope = state.activeTab === "watchlist" ? "all" : "holdings";
+
     state.data = buildDataFromBase_(base, snapshots, {});
     state.snapshotsLoaded = true;
 
-    const quoteData = await fetchQuotesForBase_(base, addProgress);
-    state.data = buildDataFromBase_(base, snapshots, quoteData);
+    const quoteData = await fetchQuotesForBase_(base, addProgress, refreshScope);
+    const mergedQuoteData = refreshScope === "holdings"
+      ? mergeQuotesWithPreviousWatchlist_(quoteData, previousData)
+      : quoteData;
+
+    state.data = buildDataFromBase_(base, snapshots, mergedQuoteData);
 
     addProgress("화면을 갱신하고 있습니다.");
     state.isRefreshing = false;
@@ -570,6 +582,35 @@ async function refreshFromLocalCache_() {
     state.isRefreshing = false;
     renderError(err.message || String(err));
   }
+}
+
+function mergeQuotesWithPreviousWatchlist_(quoteData = {}, previousData = null) {
+  const merged = {
+    ...quoteData,
+    quotes: {
+      ...(quoteData.quotes || {})
+    }
+  };
+
+  const addPreviousQuote = item => {
+    const symbol = String(item?.symbol || "").trim();
+    if (!symbol || merged.quotes[symbol]) return;
+    merged.quotes[symbol] = {
+      symbol,
+      currentPrice: Number(item.currentPrice || 0),
+      dayChangeAmount: Number(item.dayChangeAmount || 0),
+      dayChangeRate: Number(item.dayChangeRate || 0),
+      fxRate: Number(item.fxRate || 0)
+    };
+  };
+
+  (previousData?.watchlistItems || []).forEach(addPreviousQuote);
+
+  if (!merged.usdKrw) {
+    merged.usdKrw = Number(previousData?.usdKrw || 0);
+  }
+
+  return merged;
 }
 
 const MOCK_DATA = {
