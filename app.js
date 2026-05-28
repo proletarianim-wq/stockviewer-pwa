@@ -270,6 +270,7 @@ function normalizeWatchlists_(watchlists, symbols = {}) {
         ...meta,
         ...item,
         symbol,
+        group: String(item.group || item["그룹"] || "").trim(),
         name: item.name || item["종목명"] || meta.name || symbol,
         exchange: String(item.exchange || item["거래소"] || meta.exchange || "").trim().toUpperCase(),
         assetType: item.assetType || item["자산구분"] || meta.assetType || "",
@@ -430,6 +431,7 @@ function buildWatchlistItemsFromBase_(base, quoteData = {}) {
     return {
       symbol,
       name: meta.name || symbol,
+      group: String(meta.group || "").trim(),
       exchange: meta.exchange || "",
       assetType: meta.assetType || "",
       currency,
@@ -1327,15 +1329,43 @@ function watchlistItems() {
 function renderWatchlistTab() {
   return renderTopCard() + `
     <section class="watchlist-card">
-      ${renderWatchlistRows()}
+      ${renderWatchlistGroups()}
     </section>
   `;
 }
 
-function renderWatchlistRows() {
+function renderWatchlistGroups() {
   const items = watchlistItems();
   if (!items.length) return `<div class="muted watchlist-empty">표시할 관심종목이 없습니다.</div>`;
-  return items.map(renderWatchlistRow).join("");
+
+  return groupWatchlistItems_(items)
+    .map(group => `
+      <section class="watchlist-group-card">
+        ${group.items.map(renderWatchlistRow).join("")}
+      </section>
+    `)
+    .join("");
+}
+
+function groupWatchlistItems_(items) {
+  const groups = [];
+  const groupMap = {};
+
+  (items || []).forEach(item => {
+    const key = String(item.group || "0").trim() || "0";
+
+    if (!groupMap[key]) {
+      groupMap[key] = {
+        key,
+        items: []
+      };
+      groups.push(groupMap[key]);
+    }
+
+    groupMap[key].items.push(item);
+  });
+
+  return groups;
 }
 
 function renderWatchlistRow(i) {
@@ -1344,8 +1374,8 @@ function renderWatchlistRow(i) {
   return `
     <div class="watchlist-row">
       <div class="stock-name">${escapeHtml(i.name || i.symbol)}</div>
-      <div class="watchlist-price current-price">${formatPrice(i.currentPrice, i.currency)}</div>
-      <div class="watchlist-change day-change ${c}">${formatChange(i.dayChangeAmount, i.currency)} (${formatPlainRate2(Math.abs(i.dayChangeRate))})</div>
+      <div class="watchlist-price current-price">${formatWatchlistPrice(i)}</div>
+      <div class="watchlist-change day-change ${c}">${formatWatchlistChange(i)}</div>
     </div>
   `;
 }
@@ -2896,4 +2926,37 @@ function makeMockSnapshots() {
 
 function formatPlainRate2(v) {
   return (Number(v || 0) * 100).toFixed(2) + "%";
+}
+
+function isIndexItem_(item) {
+  const assetType = String(item?.assetType || "");
+  const exchange = String(item?.exchange || "");
+  return assetType.includes("지수") || exchange === "IDX_KR" || exchange === "IDX_US";
+}
+
+function formatWatchlistPrice(item) {
+  if (isIndexItem_(item)) {
+    return formatNumberFixed(item.currentPrice, 2);
+  }
+  return formatPrice(item.currentPrice, item.currency);
+}
+
+function formatWatchlistChange(item) {
+  const amount = Number(item.dayChangeAmount || 0);
+  const rate = Math.abs(Number(item.dayChangeRate || 0));
+
+  if (isIndexItem_(item)) {
+    const sign = amount > 0 ? "+" : amount < 0 ? "-" : "+";
+    return `${sign}${formatNumberFixed(Math.abs(amount), 2)} (${formatPlainRate2(rate)})`;
+  }
+
+  return `${formatChange(amount, item.currency)} (${formatPlainRate2(rate)})`;
+}
+
+function formatNumberFixed(value, digits = 2) {
+  const n = Number(value || 0);
+  return n.toLocaleString("ko-KR", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits
+  });
 }

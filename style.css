@@ -212,7 +212,7 @@
   
   /* FONT 15 (공통): 박스 보유주식수 */
   /*--font-15-family: var(--font-family-base); */
-  --font-14-family: "Roboto", "Pretendard Variable", sans-serif;
+  --font-15-family: "Roboto", "Pretendard Variable", sans-serif;
   --font-15-size: 10px;
   --font-15-weight: 600;
   --font-15-color: #222;
@@ -1463,12 +1463,16 @@ button { font-family: inherit; }
 ========================================================= */
 
 .watchlist-card {
+  display: grid;
+  gap: 10px;                 /* 여백조절 관심종목 그룹 박스 사이 간격 */
+  margin: 0px 0 10px;        /* 여백조절 관심종목 전체 바깥여백 */
+}
+
+.watchlist-group-card {
   border: var(--box-border-width) solid var(--color-box-border);
   border-radius: var(--box-radius);
   background: #fff;
-  padding: 7px 10px 7px 10px; /* 여백조절 관심종목 리스트 박스 내부 위/우/아래/좌 */
-  margin: 0px 0 10px;        /* 박스 바깥여백 위/*/
-  min-height: 70vh;
+  padding: 7px 10px 7px 10px; /* 여백조절 관심종목 그룹 박스 내부 위/우/아래/좌 */
 }
 
 .watchlist-row {
