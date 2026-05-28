@@ -1190,17 +1190,54 @@ function summary(account = "전체계좌") {
 }
 
 function dayProfit(items) {
+  const policy = dailyProfitPolicy_(new Date());
+  if (policy === "none") return { amount: 0, rate: 0 };
+
   let amount = 0, prevValue = 0;
   items.forEach(i => {
     if (isCash(i.symbol)) return;
+    if (!shouldIncludeInDailyProfit_(i, policy)) return;
+
     const r = Number(i.dayChangeRate || 0);
     const value = Number(i.valueKrw || 0);
-    if (r <= -0.99) return;
+    if (!Number.isFinite(r) || r <= -0.99 || !value) return;
+
     const prev = value / (1 + r);
     amount += value - prev;
     prevValue += prev;
   });
   return { amount, rate: prevValue ? amount / prevValue : 0 };
+}
+
+function dailyProfitPolicy_(now) {
+  const d = now || new Date();
+  const minutes = d.getHours() * 60 + d.getMinutes();
+
+  // 한국 투자자 체감 투자일 기준.
+  // 08:00~09:00: 새 투자일 시작 전, 일간수익률 0.
+  if (minutes >= 8 * 60 && minutes < 9 * 60) return "none";
+
+  // 09:00~22:30: 한국장 오늘 등락만 반영.
+  if (minutes >= 9 * 60 && minutes < 22 * 60 + 30) return "domestic";
+
+  // 22:30~익일 08:00: 한국장 직전 등락 + 미국장 현재/마감 등락 반영.
+  return "all";
+}
+
+function shouldIncludeInDailyProfit_(item, policy) {
+  if (policy === "all") return true;
+  if (policy === "domestic") return isDomesticMarketItem_(item);
+  return false;
+}
+
+function isDomesticMarketItem_(item) {
+  const exchange = String(item?.exchange || "").trim().toUpperCase();
+  const assetType = String(item?.assetType || "").trim();
+
+  if (exchange === "KRX" || exchange === "IDX_KR") return true;
+  if (assetType.startsWith("국내")) return true;
+
+  return false;
 }
 
 function sorted(items) {
