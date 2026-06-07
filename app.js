@@ -9,6 +9,7 @@ let CONFIG = {
   apiUrl: "",
   quoteApiUrl: "",
   token: "",
+  kisThrottleMs: 120,
   smallWeightThreshold: 0.01
 };
 
@@ -501,6 +502,15 @@ async function fetchQuotesForBase_(base, addProgress, scope = "all") {
   return await loadJsonpAction_("quotesCached", { scope });
 }
 
+function normalizeThrottleMs_(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 120;
+
+  // 너무 낮으면 한투 초당 호출 제한이 자주 발생할 수 있으므로 최소값을 둡니다.
+  // 테스트하면서 80, 100, 120 정도를 비교해보고 필요하면 다시 조정합니다.
+  return Math.max(50, Math.min(1000, Math.round(n)));
+}
+
 function quoteTargetsForScope_(base, scope = "all") {
   const positions = base?.positions || [];
   const symbols = base?.symbols || {};
@@ -518,6 +528,7 @@ async function fetchQuotesFromWorker_(base, scope = "all") {
   if (CONFIG.token) endpoint.searchParams.set("token", CONFIG.token);
 
   const targets = quoteTargetsForScope_(base, scope);
+  const throttleMs = normalizeThrottleMs_(CONFIG.kisThrottleMs);
 
   const res = await fetch(endpoint.toString(), {
     method: "POST",
@@ -526,6 +537,7 @@ async function fetchQuotesFromWorker_(base, scope = "all") {
     },
     body: JSON.stringify({
       scope,
+      throttleMs,
       targets
     })
   });
@@ -544,6 +556,7 @@ async function fetchQuotesFromWorker_(base, scope = "all") {
 
   console.log("[worker quotes]", {
     scope,
+    throttleMs,
     targetCount: targets.length,
     quoteCount: Object.keys(data.quotes || {}).length,
     errors: data.errors || [],
