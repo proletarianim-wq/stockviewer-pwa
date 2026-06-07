@@ -7,6 +7,7 @@
 
 let CONFIG = {
   apiUrl: "",
+  quoteApiUrl: "",
   token: "",
   smallWeightThreshold: 0.01
 };
@@ -468,15 +469,16 @@ function buildDataFromBase_(base, snapshots = [], quoteData = {}) {
 
 async function fetchQuotesForBase_(base, addProgress, scope = "all") {
   /*
-    시세 조회 대상은 baseData 동기화 시 GAS 쪽 CacheService에도 저장됩니다.
+    최종 구조:
+    - GAS는 Google Sheets 기반 baseData / SnapshotSummary만 담당합니다.
+    - 앱 실행 중 시세 조회는 Cloudflare Worker /quotes가 담당합니다.
     - scope="holdings": 보유종목만 갱신합니다. 일반 새로고침에서 사용합니다.
     - scope="all": 보유종목 + 관심종목을 함께 갱신합니다. 앱 시작/동기화/관심종목 탭 새로고침에서 사용합니다.
-    앱이 긴 종목 목록을 JSONP URL에 실어 보내지 않도록 짧은 action + scope만 호출합니다.
   */
   if (scope === "holdings") {
-    addProgress("한투 API로 보유종목 시세를 갱신하고 있습니다.");
+    addProgress("Cloudflare Worker로 보유종목 시세를 갱신하고 있습니다.");
   } else {
-    addProgress("한투 API로 보유종목과 관심종목 시세를 갱신하고 있습니다.");
+    addProgress("Cloudflare Worker로 보유종목과 관심종목 시세를 갱신하고 있습니다.");
   }
 
   if (!CONFIG.apiUrl) {
@@ -485,11 +487,70 @@ async function fetchQuotesForBase_(base, addProgress, scope = "all") {
     return {
       generatedAt: new Date().toISOString(),
       usdKrw: detectUsdKrwFromHoldings_(mock.holdings),
-      quotes: buildMockQuoteMap_(mock.holdings)
+      quotes: buildMockQuoteMap_(mock.holdings),
+      errors: [],
+      debugTiming: { mock: true }
     };
   }
 
+  if (CONFIG.quoteApiUrl) {
+    return await fetchQuotesFromWorker_(base, scope);
+  }
+
+  // 임시 안전장치: quoteApiUrl이 없으면 기존 GAS 시세조회로 fallback.
   return await loadJsonpAction_("quotesCached", { scope });
+}
+
+function quoteTargetsForScope_(base, scope = "all") {
+  const positions = base?.positions || [];
+  const symbols = base?.symbols || {};
+  const watchlists = base?.watchlists || [];
+
+  if (scope === "holdings") {
+    return collectQuoteTargetsFromBase_(positions, symbols, []);
+  }
+
+  return base?.quoteTargets || collectQuoteTargetsFromBase_(positions, symbols, watchlists);
+}
+
+async function fetchQuotesFromWorker_(base, scope = "all") {
+  const endpoint = new URL("quotes", CONFIG.quoteApiUrl.endsWith("/") ? CONFIG.quoteApiUrl : CONFIG.quoteApiUrl + "/");
+  if (CONFIG.token) endpoint.searchParams.set("token", CONFIG.token);
+
+  const targets = quoteTargetsForScope_(base, scope);
+
+  const res = await fetch(endpoint.toString(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      scope,
+      targets
+    })
+  });
+
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch (_) {
+    throw new Error(`Worker 응답을 JSON으로 해석하지 못했습니다: ${text.slice(0, 200)}`);
+  }
+
+  if (!res.ok || data?.ok === false) {
+    throw new Error(data?.error || `Worker 시세조회 실패 HTTP ${res.status}`);
+  }
+
+  console.log("[worker quotes]", {
+    scope,
+    targetCount: targets.length,
+    quoteCount: Object.keys(data.quotes || {}).length,
+    errors: data.errors || [],
+    debugTiming: data.debugTiming || {}
+  });
+
+  return data;
 }
 
 async function loadAppData_(mode = "startup") {
@@ -545,6 +606,7 @@ async function loadAppData_(mode = "startup") {
     addProgress("화면을 갱신하고 있습니다.");
     state.isRefreshing = false;
     render();
+    showQuoteWarningIfNeeded_(quoteData);
   } catch (err) {
     state.isRefreshing = false;
     renderError(err.message || String(err));
@@ -580,6 +642,7 @@ async function refreshFromLocalCache_() {
     addProgress("화면을 갱신하고 있습니다.");
     state.isRefreshing = false;
     render();
+    showQuoteWarningIfNeeded_(quoteData);
   } catch (err) {
     state.isRefreshing = false;
     renderError(err.message || String(err));
@@ -1084,6 +1147,79 @@ function renderLoading(msg) {
 function renderError(msg) {
   document.getElementById("screen").innerHTML = `<div class="loading-screen loss">오류: ${escapeHtml(msg)}</div>`;
   updateNav();
+}
+
+
+function showQuoteWarningIfNeeded_(quoteData) {
+  const errors = Array.isArray(quoteData?.errors) ? quoteData.errors : [];
+  if (!errors.length) return;
+
+  const timing = quoteData?.debugTiming || {};
+  const success = Number(timing.quoteCount || Object.keys(quoteData?.quotes || {}).length || 0);
+  const failed = errors.length;
+  const rateLimitCount = errors.filter(e => {
+    const msg = String(e?.error || "");
+    return msg.includes("EGW00201") || msg.includes("초당 거래건수") || msg.includes("거래건수");
+  }).length;
+
+  const title = rateLimitCount
+    ? "한투 API 호출 제한 발생"
+    : "시세 일부 갱신 실패";
+
+  const message = `${success}개 성공 / ${failed}개 실패`;
+  showAppToast_(`${title}<br>${message}`, rateLimitCount ? "warn" : "error");
+
+  try {
+    const key = "stockViewerQuoteErrorLog";
+    const prev = JSON.parse(localStorage.getItem(key) || "[]");
+    prev.push({
+      at: new Date().toISOString(),
+      title,
+      success,
+      failed,
+      errors: errors.slice(0, 10),
+      debugTiming: timing
+    });
+    localStorage.setItem(key, JSON.stringify(prev.slice(-50)));
+  } catch (_) {}
+}
+
+function showAppToast_(html, type = "info") {
+  const old = document.querySelector(".app-toast");
+  if (old && old.parentNode) old.parentNode.removeChild(old);
+
+  const el = document.createElement("div");
+  el.className = `app-toast app-toast-${type}`;
+  el.innerHTML = html;
+  el.style.cssText = [
+    "position:fixed",
+    "left:50%",
+    "bottom:calc(88px + env(safe-area-inset-bottom))",
+    "transform:translateX(-50%)",
+    "z-index:9999",
+    "max-width:min(92vw,520px)",
+    "padding:10px 14px",
+    "border-radius:10px",
+    "background:rgba(20,20,20,0.92)",
+    "color:#fff",
+    "font-size:13px",
+    "font-weight:800",
+    "line-height:1.35",
+    "text-align:center",
+    "box-shadow:0 8px 24px rgba(0,0,0,0.22)",
+    "pointer-events:none"
+  ].join(";");
+
+  if (type === "warn") {
+    el.style.background = "rgba(160,92,0,0.94)";
+  } else if (type === "error") {
+    el.style.background = "rgba(160,24,24,0.94)";
+  }
+
+  document.body.appendChild(el);
+  window.setTimeout(() => {
+    if (el && el.parentNode) el.parentNode.removeChild(el);
+  }, 5200);
 }
 
 function render() {

@@ -1,5 +1,6 @@
 {
   "apiUrl": "https://script.google.com/macros/s/AKfycbwsvhHweLnLBLR9gYgicdiwFWEeUrN0xZyE9J8fO219jTe3MCmYv8I3GM6Q13aax5wNkQ/exec",
   "token": "my-stock-viewer-1234",
-  "smallWeightThreshold": 0.01
+  "smallWeightThreshold": 0.01,
+  "quoteApiUrl": "https://stock-quotes-worker.proletarian-im.workers.dev"
 }
