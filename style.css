@@ -1472,7 +1472,7 @@ button { font-family: inherit; }
   border: var(--box-border-width) solid var(--color-box-border);
   border-radius: var(--box-radius);
   background: #fff;
-  padding: 5px 10px 5px 10px; /* 여백조절 관심종목 그룹 박스 내부 위/우/아래/좌 */
+  padding: 4px 10px 4px 10px; /* 여백조절 관심종목 그룹 박스 내부 위/우/아래/좌 */
 }
 
 .watchlist-row {
