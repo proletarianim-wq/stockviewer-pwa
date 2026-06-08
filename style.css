@@ -91,7 +91,7 @@
   --app-max-width: 760px;
   --screen-padding-x: 8px;
   --screen-padding-top: 8px;
-  --bottom-nav-height: 78px;
+  --bottom-nav-height: 70px;
 
   /* 박스 공통 */
   --box-radius: 5px;
@@ -1464,7 +1464,7 @@ button { font-family: inherit; }
 
 .watchlist-card {
   display: grid;
-  gap: 10px;                 /* 여백조절 관심종목 그룹 박스 사이 간격 */
+  gap: 7px;                 /* 여백조절 관심종목 그룹 박스 사이 간격 */
   margin: 0px 0 10px;        /* 여백조절 관심종목 전체 바깥여백 */
 }
 
@@ -1472,7 +1472,7 @@ button { font-family: inherit; }
   border: var(--box-border-width) solid var(--color-box-border);
   border-radius: var(--box-radius);
   background: #fff;
-  padding: 7px 10px 7px 10px; /* 여백조절 관심종목 그룹 박스 내부 위/우/아래/좌 */
+  padding: 5px 10px 5px 10px; /* 여백조절 관심종목 그룹 박스 내부 위/우/아래/좌 */
 }
 
 .watchlist-row {
@@ -1481,7 +1481,7 @@ button { font-family: inherit; }
   gap: 5px;
   align-items: center;
   /*padding: var(--row-padding-y) 0;*/
-  padding: 5px 0px;    /*  관심종목끼리 행간겨백, 좌우여백 */
+  padding: 4px 0px;    /*  관심종목끼리 행간du백, 좌우여백 */
   border-bottom: 1px solid var(--color-line);
 }
 
