@@ -24,15 +24,15 @@
     sans-serif;
 
   /* 전체 색상 */
-  --color-bg: #000000;
-  --color-text-main: #f3f4f6;
-  --color-text-sub: #a3aab5;
-  --color-text-muted: #7d8592;
+  --color-bg: #ffffff;
+  --color-text-main: #151515;
+  --color-text-sub: #777777;
+  --color-text-muted: #aaaaaa;
   --color-profit: #d82f45;
   --color-loss: #2e70d1;
-  --color-line: #1f2937;
-  --color-box-border: #2f3a4a;
-  --color-pill-bg: #202938;
+  --color-line: #eeeeee;
+  --color-box-border: #8b8b8b;
+  --color-pill-bg: #eeeeee;
 
   /* 계좌 색상 */
   /*--color-account-all: #858585;*/
@@ -58,8 +58,11 @@
   
 
   /* 자산구분 색상 */
-  --color-stock: #DC2626;
-  --color-cash: #3D8EF5;
+  /*--color-stock: #DC2626;
+  --color-cash: #3D8EF5;  */
+  /*--color-stock: rgb(183,20,63);*/
+  --color-stock: rgb(8,153,146);
+  --color-cash: rgb(251,152,58);
 
   /* 종목별 고정 색상: 선명한 원색 톤 */
   --symbol-chart-01: #2563EB;
@@ -112,8 +115,8 @@
   --portfolio-extra-divider-padding-top: 12px; /* 여백조절 상단 공통영역과 아래 바 사이 선 아래 간격 */
 
   /* 하단 메뉴 */
-  --nav-bg: #000000;
-  --nav-border: #111827;
+  --nav-bg: #ffffff;
+  --nav-border: #dddddd;
   --nav-icon-size: 28px;
 }
 
@@ -128,14 +131,14 @@
   --font-01-family: "Roboto", "Pretendard Variable", sans-serif;
   --font-01-size: 13px;
   --font-01-weight: 700;
-  --font-01-color: #737b88;
+  --font-01-color: #aaa;
   --font-01-letter-spacing: -0.0px;
 
   /* FONT 02: 네비게이션바 - 탭 제목 선택 */
   --font-02-family: var(--font-family-base);
   --font-02-size: 13px;
   --font-02-weight: 900;
-  --font-02-color: #ffffff;
+  --font-02-color: #111;
   --font-02-letter-spacing: -0.0px;
 
   /* FONT 03: 모든 탭 - 계좌이름 */
@@ -149,64 +152,64 @@
   --font-04-family: var(--font-family-base);
   --font-04-size: 13px;
   --font-04-weight: 1000;
-  --font-04-color: #8f98a6;
+  --font-04-color: #777;
   --font-04-letter-spacing: -0.04em;
 
   /* FONT 05 (공통): 총자산금액 */
   --font-05-family: var(--font-family-base);
   --font-05-size: 20px;
   --font-05-weight: 900;
-  --font-05-color: #f8fafc;
+  --font-05-color: #050505;
   --font-05-letter-spacing: -0.8px;
     
 
   /* FONT 06 (공통): 원금금액 */
   --font-06-family: var(--font-family-base);
   --font-06-size: 14px;
-  --font-06-weight: 800;
-  --font-06-color: #9aa3af;
+  --font-06-weight: 600;
+  --font-06-color: #858585;
   --font-06-letter-spacing: -0.4px;
 
   /* FONT 07 (공통): 상단박스 - 등락금액/등락율 */
   --font-07-family: var(--font-family-base);
   --font-07-size: 12px;
-  --font-07-weight: 700;
+  --font-07-weight: 500;
   --font-07-letter-spacing: -0.4px;
 
   /* FONT 08 : 작은 회색 박스 - 원금 / 일간 / 평가 / 계좌 */
   --font-08-family: var(--font-family-base);
   --font-08-size: 10px;
   --font-08-weight: 600;
-  --font-08-color: #d4d8df;
+  --font-08-color: #333;
   --font-08-letter-spacing: -0.0px;
-  --font-08-bg: #1f2937;
+  --font-08-bg: #eeeeee;
 
   /* FONT 11: 시세 - 주식이름 */
   --font-11-family: var(--font-family-base);
   --font-11-size: 14px;
   --font-11-weight: 600;
-  --font-11-color: #e5e7eb;
+  --font-11-color: #333;
   --font-11-letter-spacing: -0.4px;
 
   /* FONT 12: 시세 - 현재주가 */
   --font-12-family: var(--font-family-base);
   --font-12-size: 15px;
-  --font-12-weight: 700;
-  --font-12-color: #f8fafc;
+  --font-12-weight: 600;
+  --font-12-color: #111;
   --font-12-letter-spacing: -0.6px;
 
   /* FONT 13: 시세 - 등락금액/등락율 */
   /*--font-13-family: var(--font-family-base);*/
   --font-01-family: "Roboto", "Pretendard Variable", sans-serif;
   --font-13-size: 11px;
-  --font-13-weight: 600;
+  --font-13-weight: 500;
   --font-13-letter-spacing: -0.4px;
 
   /* FONT 14: 시세 - 박스 평균가/수익율 */
   --font-14-family: var(--font-family-base);
   /*--font-14-family: "Roboto", "Pretendard Variable", sans-serif;*/
   --font-14-size: 10px;
-  --font-14-weight: 600;
+  --font-14-weight: 500;
   --font-14-color: #d33;
   --font-14-letter-spacing: -0.4px;
   
@@ -214,28 +217,28 @@
   /*--font-15-family: var(--font-family-base); */
   --font-15-family: "Roboto", "Pretendard Variable", sans-serif;
   --font-15-size: 10px;
-  --font-15-weight: 600;
-  --font-15-color: #e5e7eb;
+  --font-15-weight: 500;
+  --font-15-color: #222;
   --font-15-letter-spacing: -0.4px;
 
   /* FONT 31: 자산 - 주식현금비중 */
   --font-31-family: var(--font-family-base);
-  --font-31-size: 11px;
+  --font-31-size: 10px;
   --font-31-weight: 600;
-  --font-31-color: #c8d0da;
+  --font-31-color: #333;
   --font-31-letter-spacing: -0.4px;
 
   /* FONT 32: 자산 - 종목별자산금액 */
   --font-32-family: var(--font-family-base);
   --font-32-size: 15px;
-  --font-32-weight: 700;
-  --font-32-color: #f8fafc;
+  --font-32-weight: 600;
+  --font-32-color: #111;
   --font-32-letter-spacing: -0.6px;
 
   /* FONT 33: 자산 - 등락금액/등락율 */
   --font-33-family: var(--font-family-base);
   --font-33-size: 11px;
-  --font-33-weight: 700;
+  --font-33-weight:5700;
   --font-33-letter-spacing: -0.6px;
 
 
@@ -246,14 +249,14 @@
   --font-14-family: "Roboto", "Pretendard Variable", sans-serif;
   --font-41-size: 13px;
   --font-41-weight: 700;
-  --font-41-color: #e5e7eb;
+  --font-41-color: #222;
   --font-41-letter-spacing: -0.0px;
 
   /* FONT 42: 비중 - 금액/보유퍼센트 */
   --font-14-family: "Roboto", "Pretendard Variable", sans-serif;
   --font-42-size: 13px;
   --font-42-weight: 700;
-  --font-42-color: #f8fafc;
+  --font-42-color: #111;
   --font-42-letter-spacing: -0.6px;
 
   /* FONT 51: 추이 - 월/연도 선택 */
@@ -280,14 +283,14 @@
   --font-54-family: var(--font-family-base);
   --font-54-size: 21px;
   --font-54-weight: 900;
-  --font-54-color: #f8fafc;
+  --font-54-color: #222;
   --font-54-letter-spacing: -0.0px;
 
   /* FONT 55: 추이 - 터치 시 나타나는 날짜 */
   --font-55-family: var(--font-family-base);
   --font-55-size: 13px;
   --font-55-weight: 800;
-  --font-55-color: #a3aab5;
+  --font-55-color: #666;
   --font-55-letter-spacing: -0.0px;
 
 
@@ -295,14 +298,14 @@
 --font-61-family: var(--font-family-base);
 --font-61-size: 14px;
 --font-61-weight: 700;
---font-61-color: #e5e7eb;
+--font-61-color: #333;
 --font-61-letter-spacing: -0.4px;
 
 /* FONT 62: 관심종목 - 현재가 */
 --font-62-family: var(--font-family-base);
 --font-62-size: 14px;
 --font-62-weight: 700;
---font-62-color: #f8fafc;
+--font-62-color: #111;
 --font-62-letter-spacing: -0.6px;
 
 /* FONT 63: 관심종목 - 등락액/등락률 */
@@ -325,7 +328,7 @@ body {
   min-height: 100%;
   background: var(--color-bg);
   color: var(--color-text-main);
-  color-scheme: dark;
+  color-scheme: light;
   font-family: var(--font-family-base);
   font-variant-numeric: tabular-nums;
 }
@@ -671,7 +674,7 @@ button { font-family: inherit; }
   display: flex;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 1px;     /* 여백조절 자산비중 글씨와 바형 그래프 사이 간격 */
+  margin-bottom: 2px;     /* 여백조절 자산비중 글씨와 바형 그래프 사이 간격 */
   font-size: var(--font-31-size);
   font-weight: var(--font-31-weight);
   color: var(--font-31-color);
@@ -693,8 +696,8 @@ button { font-family: inherit; }
 .mix-bar {      /* 자산탭 주식-현금 보유 바 설정 */
   display: flex;
   overflow: hidden;
-  height: 14px;
-  border-radius: 999px;
+  height: 10px;
+  border-radius: 0px; /*  999px; */
   background: #eee;
 }
 
@@ -1472,7 +1475,7 @@ button { font-family: inherit; }
   border: var(--box-border-width) solid var(--color-box-border);
   border-radius: var(--box-radius);
   background: #fff;
-  padding: 4px 10px 4dvh 10px; /* 여백조절 관심종목 그룹 박스 내부 위/우/아래/좌 */
+  padding: 4px 10px 4px 10px; /* 여백조절 관심종목 그룹 박스 내부 위/우/아래/좌 */
 }
 
 .watchlist-row {
@@ -1481,7 +1484,7 @@ button { font-family: inherit; }
   gap: 5px;
   align-items: center;
   /*padding: var(--row-padding-y) 0;*/
-  padding: 4px 0px;    /*  관심종목끼리 행간du백, 좌우여백 */
+  padding: 4px 0px;    /*  관심종목끼리 행간여백, 좌우여백 */
   border-bottom: 1px solid var(--color-line);
 }
 
@@ -1638,104 +1641,214 @@ button { font-family: inherit; }
     .donut::after { inset: 27px; }
   }
 */
-
 /* =========================================================
-   DARK BLACK OVERRIDE - 1차 검정 다크버전
-   기존 레이아웃/여백은 유지하고 배경·상태바 연동 영역만 검정 계열로 통일합니다.
+   DARK PALETTE OVERRIDE - 2026-06-15
+   요청 색상 기준:
+   - 기본 글씨: rgb(207,205,218) #CFCDDA
+   - 상승: rgb(255,88,123) #FF587B
+   - 하락: rgb(51,152,255) #3398FF
+   - 회색 글씨: rgb(115,125,135) #737D87
+   - 앱 배경: rgb(19,15,28) #130F1C
+   - 그룹 내부: rgb(27,31,43) #1B1F2B
+   - 그룹 테두리 제거
 ========================================================= */
 
 :root {
-  --color-bg: #000000;
-  --color-text-main: #f3f4f6;
-  --color-text-sub: #a3aab5;
-  --color-text-muted: #7d8592;
-  --color-line: #1f2937;
-  --color-box-border: #2f3a4a;
-  --color-pill-bg: #202938;
-  --nav-bg: #000000;
-  --nav-border: #111827;
+  /* 기본 팔레트 */
+  --color-bg: #130F1C;
+  --color-text-main: #CFCDDA;
+  --color-text-sub: #737D87;
+  --color-text-muted: #737D87;
+  --color-profit: #FF587B;
+  --color-loss: #3398FF;
+  --color-line: rgba(115, 125, 135, 0.24);
+  --color-box-border: transparent;
+  --color-pill-bg: #252A3A;
 
-  --font-01-color: #737b88;
-  --font-02-color: #ffffff;
-  --font-04-color: #8f98a6;
-  --font-05-color: #f8fafc;
-  --font-06-color: #9aa3af;
-  --font-08-color: #d4d8df;
-  --font-08-bg: #1f2937;
-  --font-11-color: #e5e7eb;
-  --font-12-color: #f8fafc;
-  --font-15-color: #e5e7eb;
-  --font-31-color: #c8d0da;
-  --font-32-color: #f8fafc;
-  --font-41-color: #e5e7eb;
-  --font-42-color: #f8fafc;
-  --font-52-color: #8f98a6;
-  --font-53-color: #8f98a6;
-  --font-54-color: #f8fafc;
-  --font-55-color: #a3aab5;
-  --font-61-color: #e5e7eb;
-  --font-62-color: #f8fafc;
+  /* 앱 내부 하단 메뉴 */
+  --nav-bg: #130F1C;
+  --nav-border: transparent;
+
+  /* FONT 01~02: 네비게이션 */
+  --font-01-color: #737D87;
+  --font-02-color: #CFCDDA;
+
+  /* FONT 04~08: 상단 카드 */
+  --font-04-color: #737D87;
+  --font-05-color: #CFCDDA;
+  --font-06-color: #737D87;
+  --font-08-color: #737D87;
+  --font-08-bg: #252A3A;
+
+  /* FONT 11~15: 시세 */
+  --font-11-color: #CFCDDA;
+  --font-12-color: #CFCDDA;
+  --font-15-color: #CFCDDA;
+
+  /* FONT 31~33: 자산 */
+  --font-31-color: #737D87;
+  --font-32-color: #CFCDDA;
+
+  /* FONT 41~42: 비중 */
+  --font-41-color: #CFCDDA;
+  --font-42-color: #CFCDDA;
+
+  /* FONT 51~55: 추이 */
+  --font-52-color: #737D87;
+  --font-53-color: #737D87;
+  --font-54-color: #CFCDDA;
+  --font-55-color: #737D87;
+
+  /* FONT 61~63: 관심종목 */
+  --font-61-color: #CFCDDA;
+  --font-62-color: #CFCDDA;
+
+  /* 추이 그래프 */
+  --trend-asset-color: #FF587B;
+  --trend-principal-color: #737D87;
 }
 
 html,
-body,
-.app,
-.screen {
-  background: #000000 !important;
-  color: var(--color-text-main) !important;
+body {
+  background: #130F1C;
+  color: #CFCDDA;
   color-scheme: dark;
 }
 
+.app,
+.screen {
+  background: #130F1C;
+  color: #CFCDDA;
+}
+
+/* 그룹 내부 배경 + 테두리 제거 */
 .portfolio-summary-card,
 .top-card,
 .weight-top-card,
 .account-box,
 .watchlist-group-card {
-  background: #050505 !important;
+  background: #1B1F2B;
+  border: 0 !important;
+  box-shadow: none;
 }
 
+/* 계좌 탭도 그룹 내부 톤과 어울리도록 조정 */
+.account-tab {
+  background: #2A3042;
+  color: #CFCDDA;
+}
+
+/* 구분선은 완전 테두리가 아니라 내부 행 구분용으로만 은은하게 */
+.portfolio-summary-extra,
+.account-summary,
+.asset-mix,
+.quote-row,
+.asset-row,
+.watchlist-row {
+  border-color: rgba(115, 125, 135, 0.24);
+}
+
+/* 하단 앱 메뉴 */
 .bottom-nav {
-  background: #000000 !important;
-  border-top-color: #111827 !important;
+  background: #130F1C;
+  border-top-color: transparent;
 }
 
+.nav-label {
+  color: #737D87;
+}
+
+.nav-item.active .nav-label {
+  color: #CFCDDA;
+}
+
+/* 기본 텍스트 */
+.stock-name,
+.current-price,
+.asset-amount,
+.account-weight-no,
+.account-weight-name,
+.account-weight-value,
+.account-weight-rate,
+.weight-detail-name,
+.weight-detail-value,
+.weight-detail-rate,
+.weight-name,
+.weight-rate,
+.watchlist-row > .stock-name,
+.watchlist-row .watchlist-price.current-price,
+.amount-main,
+.profit-rate-title {
+  color: #CFCDDA;
+}
+
+/* 회색 계열 텍스트 */
+.muted,
 .loading-screen,
-.loading-progress {
-  background: #000000 !important;
-  color: var(--color-text-muted) !important;
+.principal-line,
+.top-card-title,
+.trend-legend,
+.trend-selected-date,
+.trend-empty,
+.cash-detail,
+.asset-profit.muted {
+  color: #737D87;
 }
 
-.loading-progress-title,
-.loading-progress-list li:last-child {
-  color: #f8fafc !important;
+/* 상승/하락 색상 강제 */
+.profit,
+.summary-profit-row.profit,
+.day-change.profit,
+.asset-profit.profit,
+.watchlist-change.profit,
+.info-pill.avg-profit {
+  color: #FF587B !important;
 }
 
-.info-pill {
-  background: #1f2937 !important;
-  color: var(--font-15-color) !important;
+.loss,
+.summary-profit-row.loss,
+.day-change.loss,
+.asset-profit.loss,
+.watchlist-change.loss,
+.info-pill.avg-loss {
+  color: #3398FF !important;
+}
+
+/* 작은 캡슐/정보 박스 */
+.pill-label,
+.summary-profit-row .label,
+.info-pill,
+.cash-fx-pill {
+  background: #252A3A;
+  color: #CFCDDA;
 }
 
 .info-pill.avg-profit {
-  background: rgba(216, 47, 69, 0.18) !important;
-  color: var(--color-profit) !important;
+  background: rgba(255, 88, 123, 0.16);
 }
 
 .info-pill.avg-loss {
-  background: rgba(46, 112, 209, 0.20) !important;
-  color: var(--color-loss) !important;
+  background: rgba(51, 152, 255, 0.16);
 }
 
-.pill-label,
-.summary-profit-row .label {
-  background: var(--font-08-bg) !important;
-  color: var(--font-08-color) !important;
-}
-
+/* 자산 믹스 바, 비중 바 배경 */
 .mix-bar,
-.stacked-bar,
+.stacked-bar {
+  background: #252A3A;
+}
+
+/* 추이 탭 컨트롤 */
 .trend-periods,
 .trend-mode-bar {
-  background: #111827 !important;
+  background: #1B1F2B;
+  box-shadow: none;
+}
+
+.trend-period-btn,
+.trend-mode-btn,
+.trend-date-nav,
+.trend-history-date {
+  color: #737D87;
 }
 
 .trend-period-btn.active,
@@ -1744,35 +1857,44 @@ body,
 .trend-date-nav.is-pressed,
 .trend-history-date:active,
 .trend-history-date.is-pressed {
-  background: #2a3444 !important;
-  color: #ffffff !important;
-}
-
-.trend-period-btn,
-.trend-mode-btn,
-.trend-date-nav,
-.trend-history-date,
-.trend-selected-date {
-  color: #8f98a6 !important;
+  background: #252A3A;
+  color: #CFCDDA;
+  box-shadow: none;
 }
 
 .trend-plot-border {
-  stroke: #2f3a4a !important;
+  stroke: rgba(115, 125, 135, 0.40);
 }
 
 .trend-grid-line {
-  stroke: #1f2937 !important;
+  stroke: rgba(115, 125, 135, 0.26);
 }
 
 .trend-touch-line {
-  stroke: #4b5563 !important;
+  stroke: rgba(207, 205, 218, 0.46);
 }
 
 .trend-touch-dot {
-  stroke: #000000 !important;
+  fill: #FF587B;
+  stroke: #1B1F2B;
 }
 
+/* 로딩/진행 화면 */
+.loading-progress {
+  color: #737D87;
+}
+
+.loading-progress-title,
+.loading-progress-list li:last-child {
+  color: #CFCDDA;
+}
+
+/* 관심종목 카드 */
+.watchlist-card {
+  background: transparent;
+}
+
+/* 도넛 중앙 배경 */
 .donut::after {
-  background: #050505 !important;
+  background: #1B1F2B;
 }
-
