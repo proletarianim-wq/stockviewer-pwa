@@ -62,7 +62,8 @@
   --color-cash: #3D8EF5;  */
   /*--color-stock: rgb(183,20,63);*/
   --color-stock: rgb(8,153,146);
-  --color-cash: rgb(251,152,58);
+  /*--color-cash: rgb(251,152,58);*/
+  --color-cash: rgb(121,224,143);
 
   /* 종목별 고정 색상: 선명한 원색 톤 */
   --symbol-chart-01: #2563EB;
