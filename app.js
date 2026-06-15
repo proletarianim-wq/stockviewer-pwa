@@ -84,7 +84,8 @@ const LOCAL_DB = {
   store: "kv",
   keys: {
     baseData: "baseData",
-    snapshots: "snapshots"
+    snapshots: "snapshots",
+    overseasDailyClose: "overseasDailyClose"
   }
 };
 
@@ -495,7 +496,7 @@ async function fetchQuotesForBase_(base, addProgress, scope = "all") {
   }
 
   if (CONFIG.quoteApiUrl) {
-    return await fetchQuotesFromWorker_(base, scope);
+    return await fetchQuotesFromWorker_(base, scope, addProgress);
   }
 
   // 임시 안전장치: quoteApiUrl이 없으면 기존 GAS 시세조회로 fallback.
@@ -523,12 +524,82 @@ function quoteTargetsForScope_(base, scope = "all") {
   return base?.quoteTargets || collectQuoteTargetsFromBase_(positions, symbols, watchlists);
 }
 
-async function fetchQuotesFromWorker_(base, scope = "all") {
+async function fetchQuotesFromWorker_(base, scope = "all", addProgress = null) {
+  const allTargets = quoteTargetsForScope_(base, scope);
+  const throttleMs = normalizeThrottleMs_(CONFIG.kisThrottleMs);
+  const useDailyClose = shouldUseOverseasDailyClose_(new Date());
+
+  let liveTargets = allTargets;
+  let overseasDailyCloseTargets = [];
+
+  /*
+    한국시간 05:00~22:30에는 미국 주식/ETF의 프리마켓/애프터마켓 가격을
+    메인 현재가로 쓰지 않습니다.
+    - 국내주식/국내지수/해외지수: 기존 /quotes 유지
+    - 미국 주식/ETF: IndexedDB의 오늘 daily close 캐시 사용
+      캐시가 없거나 일부 종목이 없으면 /overseas-close-quotes로 보충합니다.
+  */
+  if (useDailyClose) {
+    overseasDailyCloseTargets = allTargets.filter(isOverseasStockTargetClient_);
+    liveTargets = allTargets.filter(t => !isOverseasStockTargetClient_(t));
+
+    addProgress?.(
+      `미국 정규장 외 시간입니다. 미국 주식/ETF ${overseasDailyCloseTargets.length}개는 정규장 마감 시세를 사용합니다.`
+    );
+  } else {
+    addProgress?.(
+      `미국 정규장 시간입니다. 해외주식/ETF를 포함해 ${allTargets.length}개를 실시간 시세로 조회합니다.`
+    );
+  }
+
+  let liveData;
+  if (liveTargets.length) {
+    addProgress?.(`Cloudflare Worker /quotes로 ${liveTargets.length}개 종목을 실시간 조회하고 있습니다.`);
+    liveData = await fetchLiveQuotesFromWorker_(liveTargets, scope, throttleMs);
+  } else {
+    addProgress?.("실시간 조회할 국내/지수 종목이 없어 /quotes 호출은 건너뜁니다.");
+    liveData = {
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      scope,
+      usdKrw: 0,
+      quotes: {},
+      errors: [],
+      debugTiming: { skippedLiveQuotes: true }
+    };
+  }
+
+  let closeData = null;
+  if (useDailyClose && overseasDailyCloseTargets.length) {
+    closeData = await getOverseasDailyCloseQuotesWithCache_(overseasDailyCloseTargets, throttleMs, addProgress);
+  }
+
+  const merged = mergeWorkerQuoteData_(liveData, closeData, {
+    scope,
+    useDailyClose,
+    totalTargetCount: allTargets.length,
+    liveTargetCount: liveTargets.length,
+    overseasDailyCloseTargetCount: overseasDailyCloseTargets.length
+  });
+
+  console.log("[worker quotes]", {
+    scope,
+    throttleMs,
+    useDailyClose,
+    targetCount: allTargets.length,
+    liveTargetCount: liveTargets.length,
+    overseasDailyCloseTargetCount: overseasDailyCloseTargets.length,
+    quoteCount: Object.keys(merged.quotes || {}).length,
+    errors: merged.errors || [],
+    debugTiming: merged.debugTiming || {}
+  });
+
+  return merged;
+}
+
+async function fetchLiveQuotesFromWorker_(targets, scope = "all", throttleMs = 120) {
   const endpoint = new URL("quotes", CONFIG.quoteApiUrl.endsWith("/") ? CONFIG.quoteApiUrl : CONFIG.quoteApiUrl + "/");
   if (CONFIG.token) endpoint.searchParams.set("token", CONFIG.token);
-
-  const targets = quoteTargetsForScope_(base, scope);
-  const throttleMs = normalizeThrottleMs_(CONFIG.kisThrottleMs);
 
   const res = await fetch(endpoint.toString(), {
     method: "POST",
@@ -542,28 +613,212 @@ async function fetchQuotesFromWorker_(base, scope = "all") {
     })
   });
 
-  const text = await res.text();
-  let data;
-  try {
-    data = text ? JSON.parse(text) : {};
-  } catch (_) {
-    throw new Error(`Worker 응답을 JSON으로 해석하지 못했습니다: ${text.slice(0, 200)}`);
-  }
+  const data = await readWorkerJsonResponse_(res, "Worker 시세조회");
 
   if (!res.ok || data?.ok === false) {
     throw new Error(data?.error || `Worker 시세조회 실패 HTTP ${res.status}`);
   }
 
-  console.log("[worker quotes]", {
-    scope,
-    throttleMs,
-    targetCount: targets.length,
-    quoteCount: Object.keys(data.quotes || {}).length,
-    errors: data.errors || [],
-    debugTiming: data.debugTiming || {}
+  return data;
+}
+
+async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, addProgress = null) {
+  const cacheDate = todayCompactKey_();
+  const symbols = Array.from(new Set((targets || []).map(t => String(t.symbol || "").trim()).filter(Boolean)));
+
+  addProgress?.("미국 정규장 마감 시세 캐시를 IndexedDB에서 확인하고 있습니다.");
+
+  let cached = null;
+  try {
+    cached = await idbGet_(LOCAL_DB.keys.overseasDailyClose);
+  } catch (err) {
+    console.warn("overseas daily close cache read failed", err);
+  }
+
+  const cachedQuotes = cached?.cacheDate === cacheDate && cached?.quotes
+    ? { ...cached.quotes }
+    : {};
+
+  const missingTargets = (targets || []).filter(target => {
+    const symbol = String(target?.symbol || "").trim();
+    return symbol && !cachedQuotes[symbol];
   });
 
+  if (!missingTargets.length) {
+    addProgress?.(`오늘 날짜 미국 마감 시세 ${targets.length}개를 IndexedDB에서 읽었습니다.`);
+  } else if (Object.keys(cachedQuotes).length) {
+    addProgress?.(
+      `미국 마감 시세 ${targets.length - missingTargets.length}개는 IndexedDB에서 읽고, ${missingTargets.length}개는 기간별시세로 조회합니다.`
+    );
+  } else {
+    addProgress?.(`오늘 날짜 캐시가 없어 미국 마감 시세 ${missingTargets.length}개를 기간별시세로 개별 조회합니다.`);
+  }
+
+  let fetched = null;
+  if (missingTargets.length) {
+    fetched = await fetchOverseasDailyCloseFromWorker_(missingTargets, throttleMs);
+
+    const fetchedCount = Object.keys(fetched.quotes || {}).length;
+    addProgress?.(`해외주식 기간별시세 ${fetchedCount}개를 받아왔습니다.`);
+
+    const mergedQuotesForCache = {
+      ...cachedQuotes,
+      ...(fetched.quotes || {})
+    };
+
+    try {
+      addProgress?.("조회한 미국 마감 시세를 IndexedDB에 저장하고 있습니다.");
+      await idbSet_(LOCAL_DB.keys.overseasDailyClose, {
+        cacheDate,
+        source: "overseas_daily_close",
+        generatedAt: fetched.generatedAt || new Date().toISOString(),
+        tradeDate: fetched.tradeDate || cached?.tradeDate || "",
+        requestedBymd: fetched.requestedBymd || "",
+        usdKrw: Number(fetched.usdKrw || cached?.usdKrw || 0),
+        quotes: mergedQuotesForCache,
+        errors: fetched.errors || []
+      });
+    } catch (err) {
+      console.warn("overseas daily close cache write failed", err);
+    }
+
+    Object.assign(cachedQuotes, fetched.quotes || {});
+  }
+
+  const quotes = {};
+  symbols.forEach(symbol => {
+    if (cachedQuotes[symbol]) quotes[symbol] = cachedQuotes[symbol];
+  });
+
+  addProgress?.(`미국 정규장 마감 시세 ${Object.keys(quotes).length}개를 화면에 반영합니다.`);
+
+  return {
+    ok: true,
+    generatedAt: fetched?.generatedAt || cached?.generatedAt || new Date().toISOString(),
+    source: "overseas_daily_close_cache",
+    cacheDate,
+    tradeDate: fetched?.tradeDate || cached?.tradeDate || "",
+    usdKrw: Number(fetched?.usdKrw || cached?.usdKrw || 0),
+    quotes,
+    errors: fetched?.errors || [],
+    debugTiming: {
+      cacheDate,
+      requestedCount: targets.length,
+      cachedHitCount: targets.length - missingTargets.length,
+      fetchedCount: missingTargets.length
+    }
+  };
+}
+
+async function fetchOverseasDailyCloseFromWorker_(targets, throttleMs = 120) {
+  const endpoint = new URL("overseas-close-quotes", CONFIG.quoteApiUrl.endsWith("/") ? CONFIG.quoteApiUrl : CONFIG.quoteApiUrl + "/");
+  if (CONFIG.token) endpoint.searchParams.set("token", CONFIG.token);
+
+  const res = await fetch(endpoint.toString(), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      throttleMs,
+      targets
+    })
+  });
+
+  const data = await readWorkerJsonResponse_(res, "Worker 해외 기간별시세조회");
+
+  if (!res.ok || data?.ok === false) {
+    throw new Error(data?.error || `Worker 해외 기간별시세조회 실패 HTTP ${res.status}`);
+  }
+
   return data;
+}
+
+async function readWorkerJsonResponse_(res, label = "Worker 응답") {
+  const text = await res.text();
+  try {
+    return text ? JSON.parse(text) : {};
+  } catch (_) {
+    throw new Error(`${label}을 JSON으로 해석하지 못했습니다: ${text.slice(0, 200)}`);
+  }
+}
+
+function mergeWorkerQuoteData_(liveData = {}, closeData = null, meta = {}) {
+  const liveQuotes = liveData.quotes || {};
+  const closeQuotes = closeData?.quotes || {};
+  const liveErrors = Array.isArray(liveData.errors) ? liveData.errors : [];
+  const closeErrors = Array.isArray(closeData?.errors) ? closeData.errors : [];
+
+  const usdKrw = Number(liveData.usdKrw || closeData?.usdKrw || 0);
+
+  return {
+    ok: true,
+    generatedAt: new Date().toISOString(),
+    scope: meta.scope || liveData.scope || "all",
+    usdKrw,
+    quotes: {
+      ...liveQuotes,
+      ...closeQuotes
+    },
+    errors: [
+      ...liveErrors,
+      ...closeErrors
+    ],
+    debugTiming: {
+      ...(liveData.debugTiming || {}),
+      overseasDailyClose: closeData?.debugTiming || null,
+      useDailyClose: !!meta.useDailyClose,
+      totalTargetCount: meta.totalTargetCount || 0,
+      liveTargetCount: meta.liveTargetCount || 0,
+      overseasDailyCloseTargetCount: meta.overseasDailyCloseTargetCount || 0,
+      liveQuoteCount: Object.keys(liveQuotes).length,
+      overseasDailyCloseQuoteCount: Object.keys(closeQuotes).length,
+      quoteCount: Object.keys({ ...liveQuotes, ...closeQuotes }).length,
+      errorCount: liveErrors.length + closeErrors.length
+    }
+  };
+}
+
+function shouldUseOverseasDailyClose_(now = new Date()) {
+  return !isUsRegularSessionKst_(now);
+}
+
+function isUsRegularSessionKst_(now = new Date()) {
+  const minutes = now.getHours() * 60 + now.getMinutes();
+  return minutes >= 22 * 60 + 30 || minutes < 5 * 60;
+}
+
+function todayCompactKey_() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}${m}${day}`;
+}
+
+function isOverseasStockTargetClient_(target) {
+  if (!target) return false;
+  if (isOverseasIndexTargetClient_(target)) return false;
+
+  const exchange = String(target.exchange || "").trim().toUpperCase();
+  const assetType = String(target.assetType || "").trim();
+  const currency = String(target.currency || "").trim().toUpperCase();
+
+  if (["NAS", "NYS", "AMS", "HKS", "TSE", "SHS", "SZS", "HSX", "HNX"].includes(exchange)) return true;
+  if (currency === "USD" && exchange !== "IDX_US") return true;
+  if ((assetType.includes("미국") || assetType.includes("해외")) && !assetType.includes("지수")) return true;
+
+  return false;
+}
+
+function isOverseasIndexTargetClient_(target) {
+  const exchange = String(target?.exchange || "").trim().toUpperCase();
+  const assetType = String(target?.assetType || "").trim();
+
+  if (exchange === "IDX_US") return true;
+  if (assetType.includes("해외지수")) return true;
+
+  return false;
 }
 
 async function loadAppData_(mode = "startup") {
