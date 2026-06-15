@@ -1553,8 +1553,8 @@ button { font-family: inherit; }
   z-index: 50;
 
   /*제미나이*/
-  padding-bottom: env(safe-area-inset-bottom, 16px); 
-  background-color: #0d4b47;
+  /*padding-bottom: env(safe-area-inset-bottom, 16px); 
+  background-color: #0d4b47;*/
 }
 
 .nav-item {
