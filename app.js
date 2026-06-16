@@ -635,9 +635,14 @@ async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, 
     console.warn("overseas daily close cache read failed", err);
   }
 
-  const cachedQuotes = cached?.cacheDate === cacheDate && cached?.quotes
+  const cacheUsable = isUsableOverseasDailyCloseCache_(cached, cacheDate);
+  const cachedQuotes = cacheUsable
     ? { ...cached.quotes }
     : {};
+
+  if (cached?.cacheDate === cacheDate && cached?.quotes && !cacheUsable) {
+    addProgress?.("기존 미국 마감 시세 캐시에 임시 환율이 들어 있어 새로 조회합니다.");
+  }
 
   const missingTargets = (targets || []).filter(target => {
     const symbol = String(target?.symbol || "").trim();
@@ -656,7 +661,7 @@ async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, 
 
   let fetched = null;
   if (missingTargets.length) {
-    fetched = await fetchOverseasDailyCloseFromWorker_(missingTargets, throttleMs);
+    fetched = await fetchOverseasDailyCloseFromWorker_(missingTargets, throttleMs, knownUsdKrwForDailyCloseRequest_());
 
     const fetchedCount = Object.keys(fetched.quotes || {}).length;
     addProgress?.(`해외주식 기간별시세 ${fetchedCount}개를 받아왔습니다.`);
@@ -675,6 +680,7 @@ async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, 
         tradeDate: fetched.tradeDate || cached?.tradeDate || "",
         requestedBymd: fetched.requestedBymd || "",
         usdKrw: Number(fetched.usdKrw || cached?.usdKrw || 0),
+        fxSource: fetched.fxSource || "",
         quotes: mergedQuotesForCache,
         errors: fetched.errors || []
       });
@@ -699,10 +705,12 @@ async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, 
     cacheDate,
     tradeDate: fetched?.tradeDate || cached?.tradeDate || "",
     usdKrw: Number(fetched?.usdKrw || cached?.usdKrw || 0),
+    fxSource: fetched?.fxSource || cached?.fxSource || "",
     quotes,
     errors: fetched?.errors || [],
     debugTiming: {
       cacheDate,
+      fxSource: fetched?.fxSource || cached?.fxSource || "",
       requestedCount: targets.length,
       cachedHitCount: targets.length - missingTargets.length,
       fetchedCount: missingTargets.length
@@ -710,19 +718,46 @@ async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, 
   };
 }
 
-async function fetchOverseasDailyCloseFromWorker_(targets, throttleMs = 120) {
+function isUsableOverseasDailyCloseCache_(cached, cacheDate) {
+  if (!cached || cached.cacheDate !== cacheDate || !cached.quotes) return false;
+
+  const fx = Number(cached.usdKrw || 0);
+  const fxSource = String(cached.fxSource || "").trim();
+
+  // 예전 캐시는 fxSource가 없고, 1450 임시 환율이 저장되어 있을 수 있습니다.
+  // 그런 캐시는 같은 날짜라도 다시 조회해서 실제 환율로 교체합니다.
+  if (!fx || fx <= 500 || fx >= 3000) return false;
+  if (!fxSource) return false;
+  if (fxSource === "fallback" || Math.round(fx) === 1450) return false;
+
+  return true;
+}
+
+function knownUsdKrwForDailyCloseRequest_() {
+  const fx = Number(state.data?.usdKrw || 0);
+  if (fx > 500 && fx < 3000 && Math.round(fx) !== 1450) return fx;
+  return 0;
+}
+
+async function fetchOverseasDailyCloseFromWorker_(targets, throttleMs = 120, usdKrw = 0) {
   const endpoint = new URL("overseas-close-quotes", CONFIG.quoteApiUrl.endsWith("/") ? CONFIG.quoteApiUrl : CONFIG.quoteApiUrl + "/");
   if (CONFIG.token) endpoint.searchParams.set("token", CONFIG.token);
+
+  const body = {
+    throttleMs,
+    targets
+  };
+
+  if (usdKrw && usdKrw > 500 && usdKrw < 3000 && Math.round(usdKrw) !== 1450) {
+    body.usdKrw = usdKrw;
+  }
 
   const res = await fetch(endpoint.toString(), {
     method: "POST",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      throttleMs,
-      targets
-    })
+    body: JSON.stringify(body)
   });
 
   const data = await readWorkerJsonResponse_(res, "Worker 해외 기간별시세조회");
@@ -749,7 +784,12 @@ function mergeWorkerQuoteData_(liveData = {}, closeData = null, meta = {}) {
   const liveErrors = Array.isArray(liveData.errors) ? liveData.errors : [];
   const closeErrors = Array.isArray(closeData?.errors) ? closeData.errors : [];
 
-  const usdKrw = Number(liveData.usdKrw || closeData?.usdKrw || 0);
+  const usdKrw = Number(
+    (meta.useDailyClose ? closeData?.usdKrw : liveData.usdKrw) ||
+    liveData.usdKrw ||
+    closeData?.usdKrw ||
+    0
+  );
 
   return {
     ok: true,
@@ -1715,9 +1755,36 @@ function renderAccountSection(account, html, index = 0) {
   `;
 }
 
+function renderAccountContentCard(account, html, index = 0, className = "") {
+  /*
+    보유/비중 탭용 공통 카드.
+    기존 바깥 account-tab을 쓰지 않고,
+    자산탭처럼 카드 안 top-card-title 위치에 계좌명을 넣습니다.
+  */
+  const title = account === "전체계좌" ? "전체계좌" : assetAccountCardTitle_(account);
+
+  return `
+    <section class="portfolio-summary-card account-content-card ${className} ${accountClass(account, index)}">
+      <div class="top-card-title">${escapeHtml(title)}</div>
+      <div class="account-content-card-body">${html}</div>
+    </section>
+  `;
+}
+
+function assetAccountCardTitle_(account) {
+  const label = splitAccountLabel(account);
+  return label.name || String(account || "").trim();
+}
+
 function renderAllSections(renderer) {
   const arr = [renderAccountSection("전체계좌", renderer("전체계좌", 0), 0)];
   accountNames().forEach((a, i) => arr.push(renderAccountSection(a, renderer(a, i + 1), i + 1)));
+  return arr.join("");
+}
+
+function renderAllAccountContentCards(renderer, className = "") {
+  const arr = [renderAccountContentCard("전체계좌", renderer("전체계좌", 0), 0, className)];
+  accountNames().forEach((a, i) => arr.push(renderAccountContentCard(a, renderer(a, i + 1), i + 1, className)));
   return arr.join("");
 }
 
@@ -1733,11 +1800,11 @@ function accountClass(account, i = 0) {
 ========================================================= */
 
 function renderQuoteTab() {
-  return renderAllSections(account => {
+  return renderAllAccountContentCards(account => {
     const items = investments(itemsFor(account));
     if (!items.length) return `<div class="muted">표시할 시세 데이터가 없습니다.</div>`;
     return items.map(renderQuoteRow).join("");
-  });
+  }, "quote-account-card");
 }
 
 function renderQuoteRow(i) {
@@ -1827,16 +1894,36 @@ function renderWatchlistRow(i) {
 
 function renderAssetTab() {
   /*
-    자산탭의 최상단은 시세탭/비중탭과 같은 공통 TOTAL PORTFOLIO 카드로 표시합니다.
-    아래 개별 계좌들은 기존 account-section 구조를 그대로 유지합니다.
+    자산탭도 보유/비중 탭과 같은 카드 구조로 통일합니다.
+    개별 계좌의 바깥 account-tab은 사용하지 않고,
+    카드 안 top-card-title 위치에 계좌명을 넣습니다.
   */
   const topHtml = renderPortfolioSummaryCard(renderAssetAccountDetails("전체계좌"), "asset-top-card");
 
   const accountHtml = accountNames()
-    .map((a, i) => renderAccountSection(a, renderAssetAccountContent(a), i + 1))
+    .map((a, i) => renderAssetAccountCard(a, renderAssetAccountDetails(a), i + 1))
     .join("");
 
   return topHtml + accountHtml;
+}
+
+function renderAssetAccountCard(account, extraHtml = "", index = 0) {
+  const s = summary(account);
+  const title = assetAccountCardTitle_(account);
+
+  return `
+    <section class="portfolio-summary-card asset-account-card ${accountClass(account, index)}">
+      <div class="top-card-title">${escapeHtml(title)}</div>
+      <div class="top-card-body">
+        <div>
+          <div class="amount-main">${formatWon(s.total)}</div>
+          <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+        </div>
+        ${renderProfitList(s)}
+      </div>
+      ${extraHtml ? `<div class="portfolio-summary-extra">${extraHtml}</div>` : ""}
+    </section>
+  `;
 }
 
 function renderAssetAccountContent(account) {
@@ -1961,7 +2048,10 @@ function renderWeightTab() {
 
   return `
     ${topHtml}
-    ${renderAllSections(account => renderWeightBarLayout(groupSmall(weightItemsFor(account).filter(i => Number(i.valueKrw || 0) > 0)), symbolColors))}
+    ${renderAllAccountContentCards(
+      account => renderWeightBarLayout(groupSmall(weightItemsFor(account).filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
+      "weight-account-card"
+    )}
   `;
 }
 
@@ -2137,10 +2227,14 @@ function renderTrendTab() {
   const topHtml = renderPortfolioSummaryCard(renderTrendGraphPanel("전체계좌"), "trend-top-card");
 
   const accountHtml = accountNames()
-    .map((a, i) => renderAccountSection(a, renderTrendAccountContent(a), i + 1))
+    .map((a, i) => renderTrendAccountCard(a, renderTrendAccountContent(a), i + 1))
     .join("");
 
   return modeHtml + topHtml + accountHtml;
+}
+
+function renderTrendAccountCard(account, html, index = 0) {
+  return renderAccountContentCard(account, html, index, "trend-account-card");
 }
 
 
@@ -2183,7 +2277,7 @@ function renderHistoricalAssetView() {
   );
 
   const accountHtml = historicalAccountNames_()
-    .map((a, i) => renderAccountSection(a, renderHistoricalAssetAccountContent(a), i + 1))
+    .map((a, i) => renderHistoricalAssetAccountCard(a, renderHistoricalAssetAccountDetails(a), i + 1))
     .join("");
 
   return topHtml + accountHtml;
@@ -2208,18 +2302,20 @@ function renderHistoricalWeightView() {
   );
 
   const sections = [
-    renderAccountSection(
+    renderAccountContentCard(
       "전체계좌",
       renderWeightBarLayout(groupSmall(historicalItemsFor_("전체계좌").filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
-      0
+      0,
+      "weight-account-card historical-weight-account-card"
     )
   ];
 
   historicalAccountNames_().forEach((a, i) => {
-    sections.push(renderAccountSection(
+    sections.push(renderAccountContentCard(
       a,
       renderWeightBarLayout(groupSmall(historicalItemsFor_(a).filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
-      i + 1
+      i + 1,
+      "weight-account-card historical-weight-account-card"
     ));
   });
 
@@ -2232,6 +2328,25 @@ function renderHistoricalPortfolioSummaryCard(account, extraHtml = "", className
   return `
     <section class="portfolio-summary-card ${className}">
       <div class="top-card-title">${account === "전체계좌" ? "TOTAL PORTFOLIO" : escapeHtml(account)}</div>
+      <div class="top-card-body">
+        <div>
+          <div class="amount-main">${formatWon(s.total)}</div>
+          <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+        </div>
+        ${renderProfitList(s)}
+      </div>
+      ${extraHtml ? `<div class="portfolio-summary-extra">${extraHtml}</div>` : ""}
+    </section>
+  `;
+}
+
+function renderHistoricalAssetAccountCard(account, extraHtml = "", index = 0) {
+  const s = historicalSummary_(account);
+  const title = assetAccountCardTitle_(account);
+
+  return `
+    <section class="portfolio-summary-card asset-account-card historical-asset-account-card ${accountClass(account, index)}">
+      <div class="top-card-title">${escapeHtml(title)}</div>
       <div class="top-card-body">
         <div>
           <div class="amount-main">${formatWon(s.total)}</div>
