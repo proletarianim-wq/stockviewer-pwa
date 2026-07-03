@@ -311,6 +311,11 @@
 --font-61-color: var(--color-data-main);
 --font-61-letter-spacing: -0.4px;
 
+/* 관심종목 탭의 보유종목 이름 전용 색상 */
+/*--watchlist-holdings-name-color: rgb(241, 177, 61);*/
+/*--watchlist-holdings-name-color:  rgb(8,153,146);*/
+--watchlist-holdings-name-color: rgb(121,224,143);
+
 /* FONT 62: 관심종목 - 현재가 */
 --font-62-family: var(--font-family-base);
 --font-62-size: 14px;
@@ -756,6 +761,87 @@ button { font-family: inherit; }
   letter-spacing: var(--font-33-letter-spacing);
   line-height: 1.05;
   white-space: nowrap;
+}
+
+/*
+  현재 자산탭 종목 한 줄: 3열 × 3행
+  열 너비는 여기서 조절합니다.
+*/
+.asset-live-row {
+  display: grid;
+  grid-template-columns: 1fr 100px 135px;
+  gap: 5px;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.asset-live-row:last-child {
+  border-bottom: 0;
+}
+
+.asset-live-name {
+  align-self: center;
+}
+
+.asset-live-market,
+.asset-live-value {
+  min-width: 0;
+  text-align: right;
+}
+
+.asset-live-price,
+.asset-live-value .asset-amount {
+  white-space: nowrap;
+}
+
+.asset-live-change,
+.asset-live-value .asset-profit {
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+.asset-live-today,
+.asset-live-meta {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  margin-top: 5px;
+  font-family: var(--font-15-family);
+  font-size: var(--font-15-size);
+  font-weight: var(--font-15-weight);
+  letter-spacing: var(--font-15-letter-spacing);
+  white-space: nowrap;
+}
+
+/* 평-금액, 수-보유주 둘 사이 간격 조절 */
+.asset-live-meta .asset-live-label:nth-child(3) {
+  margin-left: 4px;
+}
+
+/* 자산탭 오늘-평가-수량 작은 박스 */
+.asset-live-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding: 1px 2px;
+  border-radius: 4px;
+
+  font-family: var(--font-08-family);
+  font-size: var(--font-08-size);
+  font-weight: var(--font-08-weight);
+  color: var(--font-08-color);
+  letter-spacing: var(--font-08-letter-spacing);
+
+  background: var(--font-08-bg);
+  line-height: 1;
+}
+
+.asset-live-meta-value {
+  color: var(--color-data-main);
 }
 
 .cash-summary-row {
@@ -1494,6 +1580,17 @@ button { font-family: inherit; }
   margin: 0px 0 10px;        /* 여백조절 관심종목 전체 바깥여백 */
 }
 
+/* 관심종목 탭 - 보유종목 그룹 제목 */
+.watchlist-holdings-title {
+  font-family: var(--font-04-family);
+  font-size: var(--font-04-size);
+  font-weight: var(--font-04-weight);
+  color: var(--font-04-color);
+  letter-spacing: var(--font-04-letter-spacing);
+  line-height: 1;
+  margin: 4px 0 6px;
+}
+
 .watchlist-group-card {
   border: 0;
   border-radius: var(--box-radius);
@@ -1522,6 +1619,11 @@ button { font-family: inherit; }
 
 .watchlist-empty {
   padding: 18px 0;
+}
+
+/* 보유종목 박스 안의 종목명만 전용 색상 사용 */
+.watchlist-holdings-card .watchlist-row > .stock-name {
+  color: var(--watchlist-holdings-name-color);
 }
 
 .watchlist-row > .stock-name {

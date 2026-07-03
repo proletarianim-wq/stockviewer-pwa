@@ -1837,7 +1837,34 @@ function watchlistItems() {
 function renderWatchlistTab() {
   return renderTopCard() + `
     <section class="watchlist-card">
+      ${renderWatchlistHoldingsGroup()}
       ${renderWatchlistGroups()}
+    </section>
+  `;
+}
+
+/*
+  관심종목 탭 최상단의 보유종목 그룹.
+  - 현금은 제외합니다.
+  - 여러 계좌에 같은 종목이 있으면 전체계좌 기준으로 한 줄만 표시합니다.
+  - 현재가 / 일간 등락액 / 일간 등락률만 관심종목 행과 같은 형식으로 표시합니다.
+*/
+function renderWatchlistHoldingsGroup() {
+  const items = investments(itemsFor("전체계좌"));
+
+  if (!items.length) {
+    return `
+      <section class="watchlist-group-card watchlist-holdings-card">
+        <div class="watchlist-holdings-title">보유종목</div>
+        <div class="muted watchlist-empty">표시할 보유종목이 없습니다.</div>
+      </section>
+    `;
+  }
+
+  return `
+    <section class="watchlist-group-card watchlist-holdings-card">
+      <div class="watchlist-holdings-title">보유종목</div>
+      ${items.map(renderWatchlistRow).join("")}
     </section>
   `;
 }
@@ -1963,8 +1990,53 @@ function renderAssetAccountDetails(account) {
       </div>
     </div>
 
-    ${inv.map(renderAssetRow).join("")}
+    ${inv.map(renderLiveAssetRow).join("")}
     ${renderCashSummaryRow(cash)}
+  `;
+}
+
+/*
+  현재 자산탭 종목행: 3열 × 3행
+  1열: 종목명
+  2열: 현재가 / 오늘 등락 / 오늘 손익
+  3열: 자산금액 / 평가손익 / 평균가·수량
+*/
+function renderLiveAssetRow(i) {
+  const profitClass = Number(i.profit || 0) >= 0 ? "profit" : "loss";
+  const dayClass = Number(i.dayChangeAmount || 0) >= 0 ? "profit" : "loss";
+  const dayProfitKrw =
+    Number(i.dayChangeAmount || 0) *
+    Number(i.quantity || 0) *
+    Number(i.fxRate || 1);
+
+  return `
+    <div class="asset-live-row">
+      <div class="asset-live-name stock-name">${escapeHtml(displayName(i))}</div>
+
+      <div class="asset-live-market">
+        <div class="asset-live-price current-price">${formatPrice(i.currentPrice, i.currency)}</div>
+        <div class="asset-live-change day-change ${dayClass}">
+          ${formatChange(i.dayChangeAmount, i.currency)} (${formatPlainRate2(Math.abs(i.dayChangeRate))})
+        </div>
+        <div class="asset-live-today">
+          <span class="asset-live-label">일</span>
+          <span class="${dayClass}">${formatWonSign(dayProfitKrw)}</span>
+        </div>
+      </div>
+
+      <div class="asset-live-value">
+        <div class="asset-amount">${formatWon(i.valueKrw)}</div>
+        <div class="asset-profit ${profitClass}">
+          ${formatWonSign(i.profit)} (${formatRate(i.profitRate)})
+        </div>
+        <div class="asset-live-meta">
+          <span class="asset-live-label">평</span>
+          <span class="asset-live-meta-value">${formatPrice(i.avgPrice, i.currency)}</span>
+          <span class="asset-live-label">수</span>
+          <span class="asset-live-meta-value">${formatQty(i.quantity, i.symbol).replace(" 주", "주")}</span>
+        </div>
+      </div>
+    </div>
   `;
 }
 
@@ -2227,14 +2299,10 @@ function renderTrendTab() {
   const topHtml = renderPortfolioSummaryCard(renderTrendGraphPanel("전체계좌"), "trend-top-card");
 
   const accountHtml = accountNames()
-    .map((a, i) => renderTrendAccountCard(a, renderTrendAccountContent(a), i + 1))
+    .map((a, i) => renderAccountSection(a, renderTrendAccountContent(a), i + 1))
     .join("");
 
   return modeHtml + topHtml + accountHtml;
-}
-
-function renderTrendAccountCard(account, html, index = 0) {
-  return renderAccountContentCard(account, html, index, "trend-account-card");
 }
 
 
@@ -2277,7 +2345,7 @@ function renderHistoricalAssetView() {
   );
 
   const accountHtml = historicalAccountNames_()
-    .map((a, i) => renderHistoricalAssetAccountCard(a, renderHistoricalAssetAccountDetails(a), i + 1))
+    .map((a, i) => renderAccountSection(a, renderHistoricalAssetAccountContent(a), i + 1))
     .join("");
 
   return topHtml + accountHtml;
@@ -2302,20 +2370,18 @@ function renderHistoricalWeightView() {
   );
 
   const sections = [
-    renderAccountContentCard(
+    renderAccountSection(
       "전체계좌",
       renderWeightBarLayout(groupSmall(historicalItemsFor_("전체계좌").filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
-      0,
-      "weight-account-card historical-weight-account-card"
+      0
     )
   ];
 
   historicalAccountNames_().forEach((a, i) => {
-    sections.push(renderAccountContentCard(
+    sections.push(renderAccountSection(
       a,
       renderWeightBarLayout(groupSmall(historicalItemsFor_(a).filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
-      i + 1,
-      "weight-account-card historical-weight-account-card"
+      i + 1
     ));
   });
 
@@ -2328,25 +2394,6 @@ function renderHistoricalPortfolioSummaryCard(account, extraHtml = "", className
   return `
     <section class="portfolio-summary-card ${className}">
       <div class="top-card-title">${account === "전체계좌" ? "TOTAL PORTFOLIO" : escapeHtml(account)}</div>
-      <div class="top-card-body">
-        <div>
-          <div class="amount-main">${formatWon(s.total)}</div>
-          <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
-        </div>
-        ${renderProfitList(s)}
-      </div>
-      ${extraHtml ? `<div class="portfolio-summary-extra">${extraHtml}</div>` : ""}
-    </section>
-  `;
-}
-
-function renderHistoricalAssetAccountCard(account, extraHtml = "", index = 0) {
-  const s = historicalSummary_(account);
-  const title = assetAccountCardTitle_(account);
-
-  return `
-    <section class="portfolio-summary-card asset-account-card historical-asset-account-card ${accountClass(account, index)}">
-      <div class="top-card-title">${escapeHtml(title)}</div>
       <div class="top-card-body">
         <div>
           <div class="amount-main">${formatWon(s.total)}</div>
