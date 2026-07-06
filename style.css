@@ -188,7 +188,7 @@
 
   /* FONT 08 : 작은 회색 박스 - 원금 / 일간 / 평가 / 계좌 */
   --font-08-family: var(--font-family-base);
-  --font-08-size: 10px;
+  --font-08-size: 9px;
   --font-08-weight: 600;
   --font-08-color: var(--color-ui-muted);
   --font-08-letter-spacing: -0.0px;
@@ -765,6 +765,8 @@ button { font-family: inherit; }
 
 /*
   현재 자산탭 종목 한 줄: 3열 × 3행
+  2열: 현재가 / 등락 / 평단
+  3열: 평가금액 / 평가손익 / 일간손익·수량
   열 너비는 여기서 조절합니다.
 */
 .asset-live-row {
@@ -806,9 +808,9 @@ button { font-family: inherit; }
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
-  margin-top: 5px;
+  margin-top: 2px;
   font-family: var(--font-15-family);
   font-size: var(--font-15-size);
   font-weight: var(--font-15-weight);
@@ -817,7 +819,7 @@ button { font-family: inherit; }
 }
 
 /* 평-금액, 수-보유주 둘 사이 간격 조절 */
-.asset-live-meta .asset-live-label:nth-child(3) {
+.asset-live-qty {
   margin-left: 4px;
 }
 
@@ -845,10 +847,15 @@ button { font-family: inherit; }
 }
 
 .cash-summary-row {
-  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  grid-template-columns: minmax(0, 1fr) minmax(235px, 2fr);
+}
+
+.cash-summary-name {
+  white-space: nowrap;
 }
 
 .cash-summary-value {
+  min-width: 0;
   text-align: right;
 }
 
@@ -856,20 +863,38 @@ button { font-family: inherit; }
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  gap: 5px;         /* 자산탭 예수금 환율박스와 총액 사이 간격 */
 }
 
-.cash-fx-pill {
-  width: auto;
-  min-width: 90px;    /* 자산탭 예수금 환율박스 폭 */
-  padding: 2px 6px;
+.cash-summary-bottom {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin-top: 4px;
+  font-family: var(--font-15-family);
+  font-size: var(--font-15-size);
+  font-weight: var(--font-15-weight);
+  letter-spacing: var(--font-15-letter-spacing);
+  white-space: nowrap;
 }
 
 .cash-detail {
-  margin-top: 4px;      /* 여백조절 자산탭 예수금 현금+달러 위쪽 여백 */
-  text-align: right;
-  padding-right: 3px;   /* 여백조걸 자산탭 예수금 현금+달러 우측 여백 */
+  min-width: 0;
+  color: var(--color-ui-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.cash-fx-label {
+  flex: 0 0 auto;
+  margin-left: 3px;
+}
+
+.cash-fx-value {
+  flex: 0 0 auto;
+  color: var(--color-data-main);
 }
 
 /* =========================================================
@@ -1674,7 +1699,7 @@ button { font-family: inherit; }
   height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
   padding: 5px 6px calc(6px + env(safe-area-inset-bottom));
   display: grid;
-  grid-template-columns: repeat(7, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 2px;
   background: var(--nav-bg);
   border-top: 1px solid var(--nav-border);

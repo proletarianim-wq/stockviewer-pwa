@@ -49,7 +49,7 @@ const NAV_ICONS = {
 };
 
 const state = {
-  activeTab: "quote",
+  activeTab: "watchlist",
   trendPeriod: "month",
   trendPeriodByAccount: {},
   data: null,
@@ -205,18 +205,23 @@ async function readBaseDataFromIndexedDb_(addProgress) {
   return normalizeBaseData_(cached.base);
 }
 
-async function loadSnapshotsWithCache_(addProgress) {
+async function loadSnapshotsWithCache_(addProgress, force = false) {
   addProgress("SnapshotSummary 캐시를 확인하고 있습니다.");
 
   const today = todayLocalKey_();
   const cached = await idbGet_(LOCAL_DB.keys.snapshots).catch(() => null);
 
-  if (cached?.loadedDate === today && Array.isArray(cached.snapshots)) {
+  if (!force && cached?.loadedDate === today && Array.isArray(cached.snapshots)) {
     addProgress("SnapshotSummary를 IndexedDB로부터 읽고 있습니다.");
     return cached.snapshots;
   }
 
-  addProgress("SnapshotSummary를 구글시트로부터 읽고 있습니다.");
+  if (force) {
+    addProgress("동기화 요청으로 SnapshotSummary를 구글시트에서 다시 읽고 있습니다.");
+  } else {
+    addProgress("SnapshotSummary를 구글시트로부터 읽고 있습니다.");
+  }
+
   const data = await loadJsonpAction_("snapshots");
   const snapshots = Array.isArray(data.snapshots) ? data.snapshots : [];
 
@@ -874,7 +879,7 @@ async function loadAppData_(mode = "startup") {
 
     if (CONFIG.apiUrl) {
       base = await fetchBaseDataFromGoogle_(addProgress);
-      snapshots = await loadSnapshotsWithCache_(addProgress);
+      snapshots = await loadSnapshotsWithCache_(addProgress, isSync);
     } else {
       addProgress("MOCK_DATA를 사용하고 있습니다.");
       await wait(250);
@@ -1979,27 +1984,16 @@ function renderAssetAccountDetails(account) {
   const cashRate = total ? cashValue / total : 0;
 
   return `
-    <div class="asset-mix">
-      <div class="mix-legend">
-        <span class="mix-stock"><i class="legend-dot"></i>주식 ${formatWon(invValue)} (${formatPlainRate(invRate)})</span>
-        <span class="mix-cash"><i class="legend-dot"></i>예수금 ${formatWon(cashValue)} (${formatPlainRate(cashRate)})</span>
-      </div>
-      <div class="mix-bar">
-        <div class="stock" style="width:${invRate * 100}%"></div>
-        <div class="cash" style="width:${cashRate * 100}%"></div>
-      </div>
-    </div>
-
     ${inv.map(renderLiveAssetRow).join("")}
-    ${renderCashSummaryRow(cash)}
+    ${renderCashSummaryRow(cash, total)}
   `;
 }
 
 /*
   현재 자산탭 종목행: 3열 × 3행
   1열: 종목명
-  2열: 현재가 / 오늘 등락 / 오늘 손익
-  3열: 자산금액 / 평가손익 / 평균가·수량
+  2열: 현재가 / 오늘 등락 / 평균가
+  3열: 자산금액 / 평가손익 / 오늘 손익·수량
 */
 function renderLiveAssetRow(i) {
   const profitClass = Number(i.profit || 0) >= 0 ? "profit" : "loss";
@@ -2018,9 +2012,9 @@ function renderLiveAssetRow(i) {
         <div class="asset-live-change day-change ${dayClass}">
           ${formatChange(i.dayChangeAmount, i.currency)} (${formatPlainRate2(Math.abs(i.dayChangeRate))})
         </div>
-        <div class="asset-live-today">
-          <span class="asset-live-label">일</span>
-          <span class="${dayClass}">${formatWonSign(dayProfitKrw)}</span>
+        <div class="asset-live-meta">
+          <span class="asset-live-label">평</span>
+          <span class="asset-live-meta-value">${formatPrice(i.avgPrice, i.currency)}</span>
         </div>
       </div>
 
@@ -2029,11 +2023,12 @@ function renderLiveAssetRow(i) {
         <div class="asset-profit ${profitClass}">
           ${formatWonSign(i.profit)} (${formatRate(i.profitRate)})
         </div>
-        <div class="asset-live-meta">
-          <span class="asset-live-label">평</span>
-          <span class="asset-live-meta-value">${formatPrice(i.avgPrice, i.currency)}</span>
-          <span class="asset-live-label">수</span>
-          <span class="asset-live-meta-value">${formatQty(i.quantity, i.symbol).replace(" 주", "주")}</span>
+        <div class="asset-live-today">
+          <span class="asset-live-label">일</span>
+          <span class="${dayClass}">${formatWonSign(dayProfitKrw)}</span>
+          <span class="asset-live-meta-value asset-live-qty">
+            ${formatQty(i.quantity, i.symbol).replace(" 주", "주")}
+          </span>
         </div>
       </div>
     </div>
@@ -2065,13 +2060,14 @@ function formatNumber(v) {
   return Math.round(Number(v || 0)).toLocaleString("ko-KR");
 }
 
-function renderCashSummaryRow(items) {
+function renderCashSummaryRow(items, accountTotal = 0) {
   if (!items.length) return "";
 
   const krw = items.find(i => i.symbol === "CASH_KRW");
   const usd = items.find(i => i.symbol === "CASH_USD");
 
-  const total = sum(items, "valueKrw");
+  const cashTotal = sum(items, "valueKrw");
+  const cashRate = Number(accountTotal || 0) ? cashTotal / Number(accountTotal || 0) : 0;
   const krwAmount = Number(krw?.quantity || 0);
   const usdAmount = Number(usd?.quantity || 0);
 
@@ -2086,14 +2082,19 @@ function renderCashSummaryRow(items) {
 
   return `
     <div class="asset-row cash-summary-row">
-      <div class="stock-name">예수금</div>
+      <div class="stock-name cash-summary-name">예수금(${formatPlainRate(cashRate)})</div>
 
       <div class="cash-summary-value">
         <div class="cash-summary-top">
-          <span class="asset-amount">${formatWon(total)}</span>
-          <span class="info-pill cash-fx-pill">${fxRate ? formatFxRate(fxRate) : "현금"}</span>
+          <span class="asset-amount">${formatWon(cashTotal)}</span>
         </div>
-        <div class="asset-profit muted cash-detail">${detail}</div>
+        <div class="cash-summary-bottom">
+          <span class="cash-detail">${detail}</span>
+          ${fxRate ? `
+            <span class="asset-live-label cash-fx-label">환</span>
+            <span class="cash-fx-value">${formatNumberFixed(fxRate, 1)}</span>
+          ` : ""}
+        </div>
       </div>
     </div>
   `;
@@ -2431,19 +2432,8 @@ function renderHistoricalAssetAccountDetails(account) {
   const cashRate = total ? cashValue / total : 0;
 
   return `
-    <div class="asset-mix">
-      <div class="mix-legend">
-        <span class="mix-stock"><i class="legend-dot"></i>주식 ${formatWon(invValue)} (${formatPlainRate(invRate)})</span>
-        <span class="mix-cash"><i class="legend-dot"></i>예수금 ${formatWon(cashValue)} (${formatPlainRate(cashRate)})</span>
-      </div>
-      <div class="mix-bar">
-        <div class="stock" style="width:${invRate * 100}%"></div>
-        <div class="cash" style="width:${cashRate * 100}%"></div>
-      </div>
-    </div>
-
     ${inv.map(renderAssetRow).join("")}
-    ${renderCashSummaryRow(cash)}
+    ${renderCashSummaryRow(cash, total)}
   `;
 }
 
