@@ -1666,10 +1666,8 @@ function dailyProfitPolicy_(now) {
   // 08:00~09:00: 새 투자일 시작 전, 일간수익률 0.
   if (minutes >= 8 * 60 && minutes < 9 * 60) return "none";
 
-  // 09:00~22:30: 한국장 오늘 등락만 반영.
-  if (minutes >= 9 * 60 && minutes < 22 * 60 + 30) return "domestic";
-
-  // 22:30~익일 08:00: 한국장 직전 등락 + 미국장 현재/마감 등락 반영.
+  // 종목행에서 QLD/VOO 같은 미국 종목의 오늘 손익을 표시하므로,
+  // 계좌 상단과 TOTAL PORTFOLIO의 오늘 손익도 같은 기준으로 전 종목을 반영합니다.
   return "all";
 }
 
@@ -1733,7 +1731,7 @@ function renderPortfolioSummaryCard(extraHtml = "", className = "") {
 function renderProfitList(s) {
   return `
     <div class="summary-profit-list">
-      ${profitRow(s.dayProfit, s.dayProfitRate, "일간")}
+      ${profitRow(s.dayProfit, s.dayProfitRate, "오늘")}
       ${profitRow(s.evalProfit, s.evalProfitRate, "평가")}
       ${profitRow(s.accountProfit, s.accountProfitRate, "계좌")}
     </div>
@@ -1992,8 +1990,8 @@ function renderAssetAccountDetails(account) {
 /*
   현재 자산탭 종목행: 3열 × 3행
   1열: 종목명
-  2열: 현재가 / 오늘 등락 / 평균가
-  3열: 자산금액 / 평가손익 / 오늘 손익·수량
+  2열: 현재가 / 오늘 등락 / 평균가·수량
+  3열: 자산금액 / 오늘 손익 / 평가손익
 */
 function renderLiveAssetRow(i) {
   const profitClass = Number(i.profit || 0) >= 0 ? "profit" : "loss";
@@ -2013,22 +2011,22 @@ function renderLiveAssetRow(i) {
           ${formatChange(i.dayChangeAmount, i.currency)} (${formatPlainRate2(Math.abs(i.dayChangeRate))})
         </div>
         <div class="asset-live-meta">
-          <span class="asset-live-label">평</span>
+          <span class="asset-live-label">평단</span>
           <span class="asset-live-meta-value">${formatPrice(i.avgPrice, i.currency)}</span>
+          <span class="asset-live-meta-value asset-live-qty">
+            ${formatQty(i.quantity, i.symbol).replace(" 주", "주")}
+          </span>
         </div>
       </div>
 
       <div class="asset-live-value">
         <div class="asset-amount">${formatWon(i.valueKrw)}</div>
+        <div class="asset-live-today">
+          <span class="asset-live-label">오늘</span>
+          <span class="${dayClass}">${formatWonSign(dayProfitKrw)}</span>
+        </div>
         <div class="asset-profit ${profitClass}">
           ${formatWonSign(i.profit)} (${formatRate(i.profitRate)})
-        </div>
-        <div class="asset-live-today">
-          <span class="asset-live-label">일</span>
-          <span class="${dayClass}">${formatWonSign(dayProfitKrw)}</span>
-          <span class="asset-live-meta-value asset-live-qty">
-            ${formatQty(i.quantity, i.symbol).replace(" 주", "주")}
-          </span>
         </div>
       </div>
     </div>
