@@ -26,7 +26,9 @@
   --color-data-main: #CFCDDA;
   --color-ui-muted: #737D87;
   --color-title-accent: rgb(241, 177, 61);
-  --color-watchlist-holdings-name: rgb(121, 224, 143);
+  /*--color-watchlist-holdings-name: rgb(121, 224, 143);*/
+  --color-watchlist-holdings-name: var(--color-data-main);
+
 
   /* 손익 */
   --color-change-up: #FF587B;
