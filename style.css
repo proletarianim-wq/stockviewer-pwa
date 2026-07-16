@@ -937,6 +937,7 @@ button {
 
 .cash-fx-value {
   flex: 0 0 auto;
+  margin-left: -5px;
   color: var(--color-data-main);
 }
 
