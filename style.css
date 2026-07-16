@@ -166,8 +166,8 @@
 
   /* FONT 06: 원금금액 */
   --font-06-family: var(--font-family-base);
-  --font-06-size: 14px;
-  --font-06-weight: 600;
+  --font-06-size: 16px;
+  --font-06-weight: 900;
   --font-06-color: var(--color-ui-muted);
   --font-06-letter-spacing: -0.4px;
 
@@ -354,9 +354,8 @@
   --cash-summary-columns: minmax(0, 1fr) minmax(235px, 2fr);
 
   /* 비중 */
-  --stacked-bar-height: 12px;
-  --account-weight-columns: 10px 8px minmax(0, 1fr) 100px 50px;
-  --weight-detail-columns: 10px minmax(0, 1fr) 100px 50px;
+  --account-weight-columns: 10px 8px minmax(0, 1fr) 74px 42px 70px;
+  --weight-detail-columns: 10px minmax(0, 1fr) 74px 42px 70px;
   --weight-item-columns: 10px minmax(0, 1fr) 65px;
   --donut-layout-columns: 140px minmax(0, 1fr);
   --donut-size: 100px;
@@ -480,10 +479,6 @@ button {
   padding-top: 0;
 }
 
-.portfolio-summary-extra > .stacked-bar:first-child {
-  margin-top: 0;
-}
-
 .top-card-title {
   font-family: var(--font-04-family);
   font-size: var(--font-04-size);
@@ -495,7 +490,7 @@ button {
 }
 
 .account-content-card .top-card-title {
-  margin-bottom: 0;
+  margin-bottom: 8;
 }
 
 .account-content-card-body {
@@ -548,7 +543,8 @@ button {
 .pill-label {
   display: inline-block;
   padding: 2px 6px;
-  margin-right: 5px;
+  margin-right: 0px;
+  margin-left: -6px;
 }
 
 .summary-profit-list {
@@ -559,9 +555,9 @@ button {
 
 .summary-profit-row {
   font-family: var(--font-07-family);
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 3px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0px;
   align-items: center;
   font-size: var(--font-07-size);
   font-weight: var(--font-07-weight);
@@ -868,9 +864,7 @@ button {
   white-space: nowrap;
 }
 
-.asset-live-qty {
-  margin-left: 4px;
-}
+
 
 .asset-live-label {
   display: inline-flex;
@@ -881,6 +875,16 @@ button {
 
 .asset-live-meta-value {
   color: var(--color-data-main);
+}
+
+/* [주] 앞 간격 */
+.asset-live-unit {
+  margin-left: 4px;
+}
+
+/* [주]와 수량 사이 간격 */
+.asset-live-qty {
+  margin-left: 0px;
 }
 
 .cash-summary-row {
@@ -938,19 +942,6 @@ button {
 /* =========================================================
    7. WEIGHT TAB
 ========================================================= */
-
-.stacked-bar {
-  display: flex;
-  overflow: hidden;
-  height: var(--stacked-bar-height);
-  border-radius: 3px;
-  margin: 8px 0 10px;
-  background: var(--color-control-bg);
-}
-
-.stacked-segment {
-  min-width: 4px;
-}
 
 .account-weight-list {
   display: grid;
@@ -1019,6 +1010,21 @@ button {
   gap: 8px;
   align-items: center;
   margin: 2px 0;
+}
+
+.weight-row-bar {
+  display: block;
+  width: 70px;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--color-control-bg);
+}
+
+.weight-row-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
 }
 
 .weight-grid {

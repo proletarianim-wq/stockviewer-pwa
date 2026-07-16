@@ -532,14 +532,19 @@ function quoteTargetsForScope_(base, scope = "all") {
 async function fetchQuotesFromWorker_(base, scope = "all", addProgress = null) {
   const allTargets = quoteTargetsForScope_(base, scope);
   const throttleMs = normalizeThrottleMs_(CONFIG.kisThrottleMs);
-  const useDailyClose = shouldUseOverseasDailyClose_(new Date());
+  const hasOverseasStocks = allTargets.some(isOverseasStockTargetClient_);
+  const marketStatus = hasOverseasStocks
+    ? await fetchUsMarketStatusFromWorker_()
+    : { isRegularOpen: true, reason: "no_overseas_stocks" };
+  const useDailyClose = hasOverseasStocks && !marketStatus.isRegularOpen;
 
   let liveTargets = allTargets;
   let overseasDailyCloseTargets = [];
 
   /*
-    한국시간 05:00~22:30에는 미국 주식/ETF의 프리마켓/애프터마켓 가격을
-    메인 현재가로 쓰지 않습니다.
+    Worker가 미국 동부시간, 주말, 휴장일, 조기 폐장을 반영해
+    실제 정규장 운영 여부를 판정합니다. 정규장 외에는 미국 주식/ETF의
+    프리마켓/애프터마켓 가격을 메인 현재가로 쓰지 않습니다.
     - 국내주식/국내지수/해외지수: 기존 /quotes 유지
     - 미국 주식/ETF: IndexedDB의 오늘 daily close 캐시 사용
       캐시가 없거나 일부 종목이 없으면 /overseas-close-quotes로 보충합니다.
@@ -582,6 +587,7 @@ async function fetchQuotesFromWorker_(base, scope = "all", addProgress = null) {
   const merged = mergeWorkerQuoteData_(liveData, closeData, {
     scope,
     useDailyClose,
+    marketStatus,
     totalTargetCount: allTargets.length,
     liveTargetCount: liveTargets.length,
     overseasDailyCloseTargetCount: overseasDailyCloseTargets.length
@@ -600,6 +606,30 @@ async function fetchQuotesFromWorker_(base, scope = "all", addProgress = null) {
   });
 
   return merged;
+}
+
+async function fetchUsMarketStatusFromWorker_() {
+  const endpoint = new URL("market-status", CONFIG.quoteApiUrl.endsWith("/") ? CONFIG.quoteApiUrl : CONFIG.quoteApiUrl + "/");
+  if (CONFIG.token) endpoint.searchParams.set("token", CONFIG.token);
+
+  try {
+    const res = await fetch(endpoint.toString(), {
+      method: "GET",
+      cache: "no-store"
+    });
+    const data = await readWorkerJsonResponse_(res, "Worker 미국 시장 상태");
+    if (!res.ok || data?.ok === false || typeof data?.isRegularOpen !== "boolean") {
+      throw new Error(data?.error || `Worker 미국 시장 상태 확인 실패 HTTP ${res.status}`);
+    }
+    return data;
+  } catch (err) {
+    console.warn("US market status check failed; using regular close", err);
+    return {
+      isRegularOpen: false,
+      reason: "market_status_unavailable",
+      error: err?.message || String(err)
+    };
+  }
 }
 
 async function fetchLiveQuotesFromWorker_(targets, scope = "all", throttleMs = 120) {
@@ -812,6 +842,7 @@ function mergeWorkerQuoteData_(liveData = {}, closeData = null, meta = {}) {
     debugTiming: {
       ...(liveData.debugTiming || {}),
       overseasDailyClose: closeData?.debugTiming || null,
+      marketStatus: meta.marketStatus || null,
       useDailyClose: !!meta.useDailyClose,
       totalTargetCount: meta.totalTargetCount || 0,
       liveTargetCount: meta.liveTargetCount || 0,
@@ -822,15 +853,6 @@ function mergeWorkerQuoteData_(liveData = {}, closeData = null, meta = {}) {
       errorCount: liveErrors.length + closeErrors.length
     }
   };
-}
-
-function shouldUseOverseasDailyClose_(now = new Date()) {
-  return !isUsRegularSessionKst_(now);
-}
-
-function isUsRegularSessionKst_(now = new Date()) {
-  const minutes = now.getHours() * 60 + now.getMinutes();
-  return minutes >= 22 * 60 + 30 || minutes < 5 * 60;
 }
 
 function todayCompactKey_() {
@@ -1732,15 +1754,15 @@ function renderProfitList(s) {
   return `
     <div class="summary-profit-list">
       ${profitRow(s.dayProfit, s.dayProfitRate, "오늘")}
-      ${profitRow(s.evalProfit, s.evalProfitRate, "평가")}
-      ${profitRow(s.accountProfit, s.accountProfitRate, "계좌")}
+      ${profitRow(s.evalProfit, s.evalProfitRate, "투자손익")}
+      ${profitRow(s.accountProfit, s.accountProfitRate, "원금대비")}
     </div>
   `;
 }
 
 function profitRow(amount, rate, label) {
   const cls = Number(amount) >= 0 ? "profit" : "loss";
-  return `<div class="summary-profit-row ${cls}"><span>${formatWonSign(amount)} (${formatPlainRate(Math.abs(rate))})</span><span class="label">${label}</span></div>`;
+  return `<div class="summary-profit-row ${cls}"><span class="label">${label}</span><span>${formatWonSign(amount)} (${formatPlainRate(Math.abs(rate))})</span></div>`;
 }
 
 function renderAccountSection(account, html, index = 0) {
@@ -1879,6 +1901,7 @@ function renderWatchlistGroups() {
   return groupWatchlistItems_(items)
     .map(group => `
       <section class="watchlist-group-card">
+        <div class="watchlist-holdings-title">${escapeHtml(group.key)}</div>
         ${group.items.map(renderWatchlistRow).join("")}
       </section>
     `)
@@ -1890,7 +1913,7 @@ function groupWatchlistItems_(items) {
   const groupMap = {};
 
   (items || []).forEach(item => {
-    const key = String(item.group || "0").trim() || "0";
+    const key = String(item.group || "기타").trim() || "기타";
 
     if (!groupMap[key]) {
       groupMap[key] = {
@@ -2011,10 +2034,11 @@ function renderLiveAssetRow(i) {
           ${formatChange(i.dayChangeAmount, i.currency)} (${formatPlainRate2(Math.abs(i.dayChangeRate))})
         </div>
         <div class="asset-live-meta">
-          <span class="asset-live-label">평단</span>
+           <span class="asset-live-label">평단</span>
           <span class="asset-live-meta-value">${formatPrice(i.avgPrice, i.currency)}</span>
+          <span class="asset-live-label asset-live-unit">수량</span>
           <span class="asset-live-meta-value asset-live-qty">
-            ${formatQty(i.quantity, i.symbol).replace(" 주", "주")}
+            ${formatQty(i.quantity, i.symbol).replace(" 주", "")}
           </span>
         </div>
       </div>
@@ -2089,7 +2113,7 @@ function renderCashSummaryRow(items, accountTotal = 0) {
         <div class="cash-summary-bottom">
           <span class="cash-detail">${detail}</span>
           ${fxRate ? `
-            <span class="asset-live-label cash-fx-label">환</span>
+            <span class="asset-live-label cash-fx-label">환율</span>
             <span class="cash-fx-value">${formatNumberFixed(fxRate, 1)}</span>
           ` : ""}
         </div>
@@ -2113,7 +2137,7 @@ function renderWeightTab() {
   });
 
   const topHtml = renderPortfolioSummaryCard(
-    renderStackedBar(accItems) + renderAccountWeightList(accItems),
+    renderAccountWeightList(accItems),
     "weight-top-card"
   );
 
@@ -2124,10 +2148,6 @@ function renderWeightTab() {
       "weight-account-card"
     )}
   `;
-}
-
-function renderStackedBar(items) {
-  return `<div class="stacked-bar">${items.map(i => `<div class="stacked-segment" style="width:${i.weight * 100}%;background:${i.color};"></div>`).join("")}</div>`;
 }
 
 function renderAccountWeightList(items) {
@@ -2148,7 +2168,19 @@ function renderAccountWeightLine(i) {
       <span class="account-weight-name">${escapeHtml(account.name)}</span>
       <span class="account-weight-value">${formatWon(i.valueKrw)}</span>
       <span class="account-weight-rate">${formatPlainRate(i.weight)}</span>
+      ${renderWeightRowBar_(i.weight, i.color)}
     </div>
+  `;
+}
+
+function renderWeightRowBar_(weight, color) {
+  const rate = Math.max(0, Math.min(1, Number(weight || 0)));
+  const width = rate > 0 ? Math.max(rate * 100, (2 / 70) * 100) : 0;
+
+  return `
+    <span class="weight-row-bar" aria-hidden="true">
+      <span class="weight-row-bar-fill" style="width:${width}%;background:${color};"></span>
+    </span>
   `;
 }
 
@@ -2228,7 +2260,6 @@ function renderWeightBarLayout(items, symbolColors = buildSymbolColorMap()) {
   }));
 
   return `
-    ${renderStackedBar(list)}
     <div class="weight-detail-list">
       ${list.map(i => renderWeightDetailLine(i)).join("")}
     </div>
@@ -2242,6 +2273,7 @@ function renderWeightDetailLine(i) {
       <span class="weight-detail-name">${escapeHtml(displayName(i))}</span>
       <span class="weight-detail-value">${formatWon(i.valueKrw)}</span>
       <span class="weight-detail-rate">${formatPlainRate(i.weight)}</span>
+      ${renderWeightRowBar_(i.weight, i.color)}
     </div>
   `;
 }
@@ -2364,7 +2396,7 @@ function renderHistoricalWeightView() {
 
   const topHtml = renderHistoricalPortfolioSummaryCard(
     "전체계좌",
-    renderStackedBar(accItems) + renderAccountWeightList(accItems),
+    renderAccountWeightList(accItems),
     "weight-top-card"
   );
 
@@ -3345,19 +3377,31 @@ function niceTrendMax(value) {
 }
 
 function formatCompactWon(v) {
-  const n = Number(v || 0);
-  if (n >= 1000000000000) return (n / 1000000000000).toFixed(1).replace(/\.0$/, "") + "조";
-  if (n >= 100000000) return (n / 100000000).toFixed(1).replace(/\.0$/, "") + "억";
-  if (n >= 10000) return Math.round(n / 10000).toLocaleString("ko-KR") + "만";
-  return Math.round(n).toLocaleString("ko-KR") + "원";
+  return formatCompactKrwAmount_(v);
 }
 
 /* =========================================================
    Formatters / utilities
 ========================================================= */
 
-function formatWon(v) { return Math.round(Number(v || 0)).toLocaleString("ko-KR") + "원"; }
-function formatWonSign(v) { const n = Math.round(Number(v || 0)); return (n >= 0 ? "+" : "-") + Math.abs(n).toLocaleString("ko-KR") + "원"; }
+function formatCompactKrwAmount_(value, forceSign = false) {
+  const n = Number(value || 0);
+  const abs = Math.abs(n);
+  const sign = n < 0 ? "-" : forceSign ? "+" : "";
+
+  if (abs <= 10_000) {
+    return sign + Math.round(abs).toLocaleString("ko-KR") + "원";
+  }
+
+  if (abs < 100_000_000) {
+    return sign + Math.round(abs / 10_000).toLocaleString("ko-KR") + "만원";
+  }
+
+  return sign + (abs / 100_000_000).toFixed(2) + "억";
+}
+
+function formatWon(v) { return formatCompactKrwAmount_(v); }
+function formatWonSign(v) { return formatCompactKrwAmount_(v, true); }
 function formatRate(v, plus = true) { const n = Number(v || 0); const t = (n * 100).toFixed(1) + "%"; return plus && n >= 0 ? "+" + t : t; }
 function formatPlainRate(v) { return (Number(v || 0) * 100).toFixed(1) + "%"; }
 
