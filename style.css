@@ -374,7 +374,7 @@
   --trend-grid-y-2: 0.50;
   --trend-grid-y-3: 0.75;
   --trend-y-label-gap: 9;
-  --trend-y-label-unit-gap: 1px;
+  --trend-y-label-unit-gap: 2px;
   --trend-touch-dot-radius: 5;
   --trend-asset-area-opacity: 0.24;
   --trend-principal-area-opacity: 0.16;
