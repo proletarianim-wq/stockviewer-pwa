@@ -107,7 +107,7 @@
   --chart-08: var(--symbol-chart-08);
 
   /* 추이 그래프 색상 */
-  --trend-asset-color: var(--color-change-up);
+  --trend-asset-color: rgb(0, 245, 201);
   --trend-principal-color: var(--color-ui-muted);
 }
 
@@ -351,7 +351,7 @@
   /* 시세/자산/관심 열폭 */
   --quote-columns: 1fr 100px 120px;
   --asset-row-columns: 1fr 140px 90px;
-  --asset-live-columns: 1fr 120px 135px;
+  --asset-live-columns: 1fr 130px 115px;
   --watchlist-columns: minmax(0, 1fr) 80px 100px;
   --cash-summary-columns: minmax(0, 1fr) minmax(235px, 2fr);
 
@@ -374,6 +374,7 @@
   --trend-grid-y-2: 0.50;
   --trend-grid-y-3: 0.75;
   --trend-y-label-gap: 9;
+  --trend-y-label-unit-gap: 1px;
   --trend-touch-dot-radius: 5;
   --trend-asset-area-opacity: 0.24;
   --trend-principal-area-opacity: 0.16;
@@ -435,6 +436,10 @@ button {
     calc(var(--screen-padding-top) + env(safe-area-inset-top))
     var(--screen-padding-x)
     calc(var(--bottom-nav-height) + 18px + env(safe-area-inset-bottom));
+}
+
+.screen.timeline-screen {
+  padding-bottom: calc(var(--bottom-nav-height) + 72px + env(safe-area-inset-bottom));
 }
 
 .loading-screen {
@@ -1096,11 +1101,90 @@ button {
   padding: 10px 0 4px;
 }
 
+.trend-slider-wrap {
+  position: relative;
+  padding:
+    14px
+    var(--trend-slider-right, 9.5%)
+    2px
+    var(--trend-slider-left, 2.5%);
+}
+
+.trend-slider-wrap::before {
+  content: "";
+  position: absolute;
+  top: 27px;
+  left: var(--trend-slider-left, 2.5%);
+  right: var(--trend-slider-right, 9.5%);
+  height: 6px;
+  border-radius: 999px;
+  background: var(--color-control-bg);
+  box-shadow: var(--shadow-inset-subtle);
+}
+
+.trend-date-slider {
+  display: block;
+  /* range 손잡이(18px)의 중심이 실제 데이터 양 끝 좌표에 오도록 보정 */
+  width: calc(100% + 18px);
+  height: 32px;
+  margin: 0 0 0 -9px;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.trend-date-slider::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.trend-date-slider::-webkit-slider-thumb {
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border: 2px solid var(--color-card-bg);
+  border-radius: 50%;
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--trend-asset-color);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+}
+
+.trend-date-slider::-moz-range-track {
+  height: 6px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.trend-date-slider::-moz-range-progress {
+  height: 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.trend-date-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-card-bg);
+  border-radius: 50%;
+  background: var(--trend-asset-color);
+  box-shadow: 0 1px 5px rgba(0, 0, 0, 0.55);
+}
+
 .trend-periods {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 0;
-  margin: 2px 0 20px;
+  margin: 16px 0 2px;
   padding: 4px;
   background: var(--color-control-bg-dark);
   border-radius: 999px;
@@ -1134,12 +1218,14 @@ button {
 }
 
 .trend-legend {
+  position: relative;
   display: flex;
-  justify-content: center;
+  justify-content: flex-start;
   align-items: center;
   gap: 12px;
   min-height: 16px;
   margin: 10px 0 2px;
+  padding-left: 2.5%;
   font-family: var(--font-52-family);
   font-size: 11px;
   font-weight: 700;
@@ -1160,12 +1246,17 @@ button {
   border-radius: 99px;
 }
 
+.trend-legend-item.asset { color: var(--trend-asset-color); }
 .trend-legend-item.asset i { background: var(--trend-asset-color); }
 .trend-legend-item.principal i { background: var(--trend-principal-color); }
 
 .trend-selected-date {
-  margin-left: 2px;
+  position: absolute;
+  left: 50%;
+  margin-left: 0;
+  transform: translateX(-50%);
   color: var(--color-ui-muted);
+  white-space: nowrap;
 }
 
 .chart-wrap,
@@ -1173,7 +1264,7 @@ button {
   position: relative;
   margin-top: var(--trend-chart-margin-top);
   padding-bottom: var(--trend-x-label-height);
-  touch-action: none;
+  touch-action: pan-y;
 }
 
 .chart-svg {
@@ -1220,6 +1311,8 @@ button {
 
 .trend-y-label-html {
   position: absolute;
+  display: inline-flex;
+  gap: var(--trend-y-label-unit-gap);
   transform: translateY(-50%);
   font-family: var(--font-53-family);
   font-size: var(--font-53-size);
@@ -1347,6 +1440,29 @@ button {
   justify-content: end;
   min-width: 0;
   transition: opacity 0.12s ease;
+}
+
+.timeline-mode-bar {
+  position: fixed;
+  left: 50%;
+  bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+  z-index: 49;
+  width: min(calc(100% - (var(--screen-padding-x) * 2)), calc(var(--app-max-width) - (var(--screen-padding-x) * 2)));
+  margin: 0;
+  transform: translateX(-50%);
+  grid-template-columns: minmax(120px, 1fr) minmax(0, 1fr) var(--trend-mode-right-width);
+  border: 1px solid var(--color-nav-border);
+  border-radius: var(--box-radius) var(--box-radius) 0 0;
+  box-shadow: 0 -5px 16px rgba(0, 0, 0, 0.34);
+}
+
+.timeline-mode-bar .timeline-mode-left {
+  grid-template-columns: 1fr 1fr;
+  margin-left: 0;
+}
+
+.timeline-mode-bar .timeline-mode-right {
+  grid-column: 3;
 }
 
 .trend-mode-right.is-hidden {
@@ -1568,7 +1684,7 @@ button {
   height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
   padding: var(--nav-padding);
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(7, 1fr);
   gap: var(--nav-gap);
   background: var(--color-nav-bg);
   border-top: 1px solid var(--color-nav-border);

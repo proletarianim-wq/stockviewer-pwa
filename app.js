@@ -3,7 +3,7 @@
 
    CONFIG.apiUrl에 Apps Script Web App 주소를 넣으면 실제 데이터 사용.
    비워두면 MOCK_DATA로 화면 확인.
-========================================================= */
+========================================================= */ 
 
 let CONFIG = {
   apiUrl: "",
@@ -42,7 +42,8 @@ const NAV_ICONS = {
   quote: { off: "./assets/icons/nav/quote-off.png", on: "./assets/icons/nav/quote-on.png" },
   asset: { off: "./assets/icons/nav/asset-off.png", on: "./assets/icons/nav/asset-on.png" },
   weight: { off: "./assets/icons/nav/weight-off.png", on: "./assets/icons/nav/weight-on.png" },
-  trend: { off: "./assets/icons/nav/trend-off.png", on: "./assets/icons/nav/trend-on.png" },
+  chart: { off: "./assets/icons/nav/chart-off.png", on: "./assets/icons/nav/chart-on.png" },
+  timeline: { off: "./assets/icons/nav/timeline-off.png", on: "./assets/icons/nav/timeline-on.png" },
   watchlist: { off: "./assets/icons/nav/watchlist-off.png", on: "./assets/icons/nav/watchlist-on.png" },
   sync: { off: "./assets/icons/nav/refreshtotal-off.png", on: "./assets/icons/nav/refreshtotal-on.png" },
   refresh: { off: "./assets/icons/nav/refresh-off.png", on: "./assets/icons/nav/refresh-on.png" }
@@ -52,9 +53,9 @@ const state = {
   activeTab: "watchlist",
   trendPeriod: "month",
   trendPeriodByAccount: {},
+  trendSelectedDateByAccount: {},
   data: null,
-  touchedTrendPoint: null,
-  trendMode: "trend",
+  timelineMode: "historyAsset",
   trendHistoryDate: "",
   snapshotDetail: null,
   snapshotDetailDate: "",
@@ -1104,10 +1105,13 @@ function setupNav() {
   document.querySelectorAll(".nav-item[data-tab]").forEach(btn => {
     btn.addEventListener("click", async () => {
       state.activeTab = btn.dataset.tab;
-      state.touchedTrendPoint = null;
 
-      if (state.activeTab === "trend" && !state.snapshotsLoaded) {
+      if ((state.activeTab === "chart" || state.activeTab === "timeline") && !state.snapshotsLoaded) {
         await loadSnapshotsIfNeeded();
+      }
+
+      if (state.activeTab === "timeline") {
+        await loadSnapshotDetailForDate(state.trendHistoryDate || latestSnapshotDate_());
       }
 
       render();
@@ -1562,12 +1566,17 @@ function render() {
   updateNav();
 
   const screen = document.getElementById("screen");
+  screen.classList.toggle("timeline-screen", state.activeTab === "timeline");
   if (state.activeTab === "quote") screen.innerHTML = renderTopCard() + renderQuoteTab();
   if (state.activeTab === "asset") screen.innerHTML = renderAssetTab();
   if (state.activeTab === "weight") screen.innerHTML = renderWeightTab();
   if (state.activeTab === "watchlist") screen.innerHTML = renderWatchlistTab();
-  if (state.activeTab === "trend") {
-    screen.innerHTML = renderTrendTab();
+  if (state.activeTab === "chart") {
+    screen.innerHTML = renderChartTab();
+    attachTrendEvents();
+  }
+  if (state.activeTab === "timeline") {
+    screen.innerHTML = renderTimelineTab();
     attachTrendEvents();
   }
 }
@@ -1753,7 +1762,7 @@ function renderPortfolioSummaryCard(extraHtml = "", className = "") {
 function renderProfitList(s) {
   return `
     <div class="summary-profit-list">
-      ${profitRow(s.dayProfit, s.dayProfitRate, "오늘")}
+      ${profitRow(s.dayProfit, s.dayProfitRate, "전일대비")}
       ${profitRow(s.evalProfit, s.evalProfitRate, "투자손익")}
       ${profitRow(s.accountProfit, s.accountProfitRate, "원금대비")}
     </div>
@@ -1797,6 +1806,7 @@ function renderAccountContentCard(account, html, index = 0, className = "") {
 }
 
 function assetAccountCardTitle_(account) {
+
   const label = splitAccountLabel(account);
   return label.name || String(account || "").trim();
 }
@@ -1951,13 +1961,19 @@ function renderAssetTab() {
     개별 계좌의 바깥 account-tab은 사용하지 않고,
     카드 안 top-card-title 위치에 계좌명을 넣습니다.
   */
-  const topHtml = renderPortfolioSummaryCard(renderAssetAccountDetails("전체계좌"), "asset-top-card");
+  const topHtml = renderPortfolioSummaryCard("", "asset-top-card");
+  const allHoldingsHtml = renderAccountContentCard(
+    "전체 보유 종목",
+    renderAssetAccountDetails("전체계좌"),
+    0,
+    "asset-all-holdings-card"
+  );
 
   const accountHtml = accountNames()
     .map((a, i) => renderAssetAccountCard(a, renderAssetAccountDetails(a), i + 1))
     .join("");
 
-  return topHtml + accountHtml;
+  return topHtml + allHoldingsHtml + accountHtml;
 }
 
 function renderAssetAccountCard(account, extraHtml = "", index = 0) {
@@ -2046,7 +2062,7 @@ function renderLiveAssetRow(i) {
       <div class="asset-live-value">
         <div class="asset-amount">${formatWon(i.valueKrw)}</div>
         <div class="asset-live-today">
-          <span class="asset-live-label">오늘</span>
+          <span class="asset-live-label">전일대비</span>
           <span class="${dayClass}">${formatWonSign(dayProfitKrw)}</span>
         </div>
         <div class="asset-profit ${profitClass}">
@@ -2136,13 +2152,17 @@ function renderWeightTab() {
     return { name, valueKrw: v, weight: total ? v / total : 0, color: accountColor(name, idx) };
   });
 
-  const topHtml = renderPortfolioSummaryCard(
+  const topHtml = renderPortfolioSummaryCard("", "weight-top-card");
+  const accountWeightHtml = renderAccountContentCard(
+    "계좌별 비중",
     renderAccountWeightList(accItems),
-    "weight-top-card"
+    0,
+    "account-weight-card"
   );
 
   return `
     ${topHtml}
+    ${accountWeightHtml}
     ${renderAllAccountContentCards(
       account => renderWeightBarLayout(groupSmall(weightItemsFor(account).filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
       "weight-account-card"
@@ -2315,31 +2335,48 @@ function groupSmall(items) {
    Trend tab
 ========================================================= */
 
-function renderTrendTab() {
-  const mode = state.trendMode || "trend";
-  const modeHtml = renderTrendModeControls();
-
-  if (mode === "historyAsset") {
-    return modeHtml + renderHistoricalAssetView();
-  }
-
-  if (mode === "historyWeight") {
-    return modeHtml + renderHistoricalWeightView();
-  }
-
-  const topHtml = renderPortfolioSummaryCard(renderTrendGraphPanel("전체계좌"), "trend-top-card");
-
+function renderChartTab() {
+  const totalCard = renderChartPortfolioCard();
   const accountHtml = accountNames()
-    .map((a, i) => renderAccountSection(a, renderTrendAccountContent(a), i + 1))
+    .map((account, index) => renderAccountContentCard(
+      account,
+      renderTrendAccountContent(account),
+      index + 1,
+      "chart-account-card"
+    ))
     .join("");
 
-  return modeHtml + topHtml + accountHtml;
+  return totalCard + accountHtml;
 }
 
+function renderChartPortfolioCard() {
+  const model = trendChartModel_("전체계좌");
 
-function renderTrendModeControls() {
-  const mode = state.trendMode || "trend";
-  const isHistory = mode !== "trend";
+  return `
+    <section class="portfolio-summary-card chart-account-card chart-total-card">
+      <div class="top-card-title">TOTAL PORTFOLIO</div>
+      <div class="chart-summary-body" data-chart-summary>
+        ${renderChartSummaryBody_(model.selected)}
+      </div>
+      <div class="portfolio-summary-extra">
+        ${renderTrendGraphPanel("전체계좌", model)}
+      </div>
+    </section>
+  `;
+}
+function renderTimelineTab() {
+  const mode = state.timelineMode || "historyAsset";
+  const controls = renderTimelineControls();
+
+  if (mode === "historyWeight") {
+    return controls + renderHistoricalWeightView();
+  }
+
+  return controls + renderHistoricalAssetView();
+}
+
+function renderTimelineControls() {
+  const mode = state.timelineMode || "historyAsset";
   const currentDate = state.trendHistoryDate || latestSnapshotDate_();
   const dateText = formatHistoryShortDateLabel_(currentDate);
   const range = historyDatePickerRange_();
@@ -2348,18 +2385,17 @@ function renderTrendModeControls() {
   const maxAttr = range.maxDate ? `max="${range.maxDate}"` : "";
 
   return `
-    <div class="trend-mode-bar">
-      <div class="trend-mode-left">
-        <button class="trend-mode-btn ${mode === "trend" ? "active" : ""}" data-trend-mode="trend" type="button">추이</button>
-        <button class="trend-mode-btn ${mode === "historyAsset" ? "active" : ""}" data-trend-mode="historyAsset" type="button">과거자산</button>
-        <button class="trend-mode-btn ${mode === "historyWeight" ? "active" : ""}" data-trend-mode="historyWeight" type="button">과거비중</button>
+    <div class="trend-mode-bar timeline-mode-bar">
+      <div class="trend-mode-left timeline-mode-left">
+        <button class="trend-mode-btn ${mode === "historyAsset" ? "active" : ""}" data-timeline-mode="historyAsset" type="button">과거자산</button>
+        <button class="trend-mode-btn ${mode === "historyWeight" ? "active" : ""}" data-timeline-mode="historyWeight" type="button">과거비중</button>
       </div>
 
-      <div class="trend-mode-right ${isHistory ? "" : "is-hidden"}" aria-hidden="${isHistory ? "false" : "true"}">
-        <button class="trend-date-nav" data-history-date-step="-1" type="button" ${isHistory ? "" : 'tabindex="-1"'}>◀</button>
-        <button class="trend-history-date" data-history-date-picker type="button" ${isHistory ? "" : 'tabindex="-1"'}>${dateText}</button>
-        <button class="trend-date-nav" data-history-date-step="1" type="button" ${isHistory ? "" : 'tabindex="-1"'}>▶</button>
-        <input class="trend-history-date-input" data-history-date-input type="date" ${minAttr} ${maxAttr} value="${pickerValue}" ${isHistory ? "" : 'tabindex="-1"'} />
+      <div class="trend-mode-right timeline-mode-right">
+        <button class="trend-date-nav" data-history-date-step="-1" type="button">◀</button>
+        <button class="trend-history-date" data-history-date-picker type="button">${dateText}</button>
+        <button class="trend-date-nav" data-history-date-step="1" type="button">▶</button>
+        <input class="trend-history-date-input" data-history-date-input type="date" ${minAttr} ${maxAttr} value="${pickerValue}" />
       </div>
     </div>
   `;
@@ -2369,17 +2405,38 @@ function renderHistoricalAssetView() {
   const detail = snapshotDetailOrEmpty_();
   if (!detail) return `<div class="loading-screen">과거 스냅샷을 선택하세요.</div>`;
 
-  const topHtml = renderHistoricalPortfolioSummaryCard(
-    "전체계좌",
+  const topHtml = renderHistoricalPortfolioSummaryCard("전체계좌", "", "asset-top-card");
+  const allHoldingsHtml = renderAccountContentCard(
+    "전체 보유 종목",
     renderHistoricalAssetAccountDetails("전체계좌"),
-    "asset-top-card"
+    0,
+    "asset-all-holdings-card"
   );
 
   const accountHtml = historicalAccountNames_()
-    .map((a, i) => renderAccountSection(a, renderHistoricalAssetAccountContent(a), i + 1))
+    .map((a, i) => renderHistoricalAssetAccountCard(a, renderHistoricalAssetAccountDetails(a), i + 1))
     .join("");
 
-  return topHtml + accountHtml;
+  return topHtml + allHoldingsHtml + accountHtml;
+}
+
+function renderHistoricalAssetAccountCard(account, extraHtml = "", index = 0) {
+  const s = historicalSummary_(account);
+  const title = assetAccountCardTitle_(account);
+
+  return `
+    <section class="portfolio-summary-card asset-account-card ${accountClass(account, index)}">
+      <div class="top-card-title">${escapeHtml(title)}</div>
+      <div class="top-card-body">
+        <div>
+          <div class="amount-main">${formatWon(s.total)}</div>
+          <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+        </div>
+        ${renderProfitList(s)}
+      </div>
+      ${extraHtml ? `<div class="portfolio-summary-extra">${extraHtml}</div>` : ""}
+    </section>
+  `;
 }
 
 function renderHistoricalWeightView() {
@@ -2388,37 +2445,39 @@ function renderHistoricalWeightView() {
 
   const total = historicalSummary_("전체계좌").total;
   const symbolColors = buildHistoricalSymbolColorMap_(historicalItemsFor_("전체계좌"));
-
   const accItems = historicalAccountNames_().map((name, idx) => {
-    const v = historicalSummary_(name).total;
-    return { name, valueKrw: v, weight: total ? v / total : 0, color: accountColor(name, idx) };
+    const valueKrw = historicalSummary_(name).total;
+    return { name, valueKrw, weight: total ? valueKrw / total : 0, color: accountColor(name, idx) };
   });
 
-  const topHtml = renderHistoricalPortfolioSummaryCard(
-    "전체계좌",
+  const topHtml = renderHistoricalPortfolioSummaryCard("전체계좌", "", "weight-top-card");
+  const accountWeightHtml = renderAccountContentCard(
+    "계좌별 비중",
     renderAccountWeightList(accItems),
-    "weight-top-card"
+    0,
+    "account-weight-card"
   );
 
-  const sections = [
-    renderAccountSection(
+  const cards = [
+    renderAccountContentCard(
       "전체계좌",
       renderWeightBarLayout(groupSmall(historicalItemsFor_("전체계좌").filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
-      0
+      0,
+      "weight-account-card"
     )
   ];
 
-  historicalAccountNames_().forEach((a, i) => {
-    sections.push(renderAccountSection(
-      a,
-      renderWeightBarLayout(groupSmall(historicalItemsFor_(a).filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
-      i + 1
+  historicalAccountNames_().forEach((account, index) => {
+    cards.push(renderAccountContentCard(
+      account,
+      renderWeightBarLayout(groupSmall(historicalItemsFor_(account).filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
+      index + 1,
+      "weight-account-card"
     ));
   });
 
-  return topHtml + sections.join("");
+  return topHtml + accountWeightHtml + cards.join("");
 }
-
 function renderHistoricalPortfolioSummaryCard(account, extraHtml = "", className = "") {
   const s = historicalSummary_(account);
 
@@ -2462,12 +2521,22 @@ function renderHistoricalAssetAccountDetails(account) {
   const cashRate = total ? cashValue / total : 0;
 
   return `
-    ${inv.map(renderAssetRow).join("")}
+    ${inv.map(renderHistoricalAssetRow).join("")}
     ${renderCashSummaryRow(cash, total)}
   `;
 }
+function renderHistoricalAssetRow(item) {
+  const quantity = Number(item?.quantity || 0);
+  const fxRate = Number(item?.fxRate || 1);
+  const dayProfit = Number(item?.dayProfit || 0);
+  const dayChangeAmount = quantity && fxRate ? dayProfit / quantity / fxRate : 0;
 
-
+  return renderLiveAssetRow({
+    ...item,
+    dayChangeAmount,
+    dayChangeRate: Number(item?.dayProfitRate || item?.dayChangeRate || 0)
+  });
+}
 function buildSnapshotDetailFromCachedSnapshots_(requestedDate = "") {
   const normalized = (state.data?.snapshots || [])
     .map(normalizeSnapshotDetailFromCache_)
@@ -2777,17 +2846,49 @@ function buildHistoricalSymbolColorMap_(items) {
 
 
 function renderTrendAccountContent(account) {
-  const s = summary(account);
+  const model = trendChartModel_(account);
+
   return `
-    <div class="account-summary trend-account-summary">
+    <div class="chart-summary-body" data-chart-summary>
+      ${renderChartSummaryBody_(model.selected)}
+    </div>
+    <div class="portfolio-summary-extra">
+      ${renderTrendGraphPanel(account, model)}
+    </div>
+  `;
+}
+
+function renderChartSummaryBody_(point) {
+  const s = trendPointSummary_(point);
+  return `
+    <div class="top-card-body">
       <div>
         <div class="amount-main">${formatWon(s.total)}</div>
         <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
       </div>
       ${renderProfitList(s)}
     </div>
-    ${renderTrendGraphPanel(account)}
   `;
+}
+
+function trendPointSummary_(point) {
+  const total = Number(point?.totalAsset || 0);
+  const basis = Number(point?.basis ?? point?.principal ?? 0);
+  const principalKrw = Number(point?.principalKrw ?? basis);
+  const evalProfit = Number(point?.evalProfit ?? (total - principalKrw));
+  const accountProfit = Number(point?.accountProfit ?? point?.profit ?? (total - basis));
+
+  return {
+    total,
+    principalKrw,
+    evalProfit,
+    evalProfitRate: Number(point?.evalProfitRate ?? (principalKrw ? evalProfit / principalKrw : 0)),
+    basis,
+    accountProfit,
+    accountProfitRate: Number(point?.accountProfitRate ?? point?.profitRate ?? (basis ? accountProfit / basis : 0)),
+    dayProfit: Number(point?.dayProfit || 0),
+    dayProfitRate: Number(point?.dayProfitRate || 0)
+  };
 }
 
 function trendPeriodFor(account) {
@@ -2799,7 +2900,7 @@ function setTrendPeriodFor(account, period) {
   state.trendPeriodByAccount[account] = period;
 }
 
-function renderTrendGraphPanel(account) {
+function trendChartModel_(account) {
   const period = trendPeriodFor(account);
   const raw = trendSnapshotPointsFor(account);
   const current = currentTrendPoint(account);
@@ -2808,35 +2909,66 @@ function renderTrendGraphPanel(account) {
   const filtered = filterTrendPoints(points, range);
   const sampled = sampleTrendPoints(filtered, maxTrendPointCount(period));
   const selected = trendSelectedPoint(account, sampled) || sampled[sampled.length - 1] || current;
+  const firstPoint = sampled[0] || selected;
+  const lastPoint = sampled[sampled.length - 1] || selected;
+  const sliderMin = trendDaySerial_(firstPoint?.date);
+  const sliderMax = Math.max(sliderMin, trendDaySerial_(lastPoint?.date));
+  const sliderValue = Math.max(sliderMin, Math.min(sliderMax, trendDaySerial_(selected?.date)));
+  const plot = trendPlotGeometry_();
+  const firstRatio = trendDateRatio_(firstPoint?.date || selected?.date, range);
+  const lastRatio = trendDateRatio_(lastPoint?.date || selected?.date, range);
+  const sliderLeftPct = ((plot.left + firstRatio * (plot.right - plot.left)) / plot.width) * 100;
+  const sliderRightPct = 100 - ((plot.left + lastRatio * (plot.right - plot.left)) / plot.width) * 100;
+
+  return {
+    account, period, range, sampled, selected,
+    sliderMin, sliderMax, sliderValue, sliderLeftPct, sliderRightPct
+  };
+}
+
+function trendDaySerial_(date) {
+  const d = parseDateKey(date || todayKey());
+  return Math.round(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000);
+}
+function renderTrendGraphPanel(account, model = trendChartModel_(account)) {
+  const sliderSpan = Math.max(0, model.sliderMax - model.sliderMin);
+  const progress = sliderSpan ? ((model.sliderValue - model.sliderMin) / sliderSpan) * 100 : 100;
 
   return `
     <div class="trend-panel" data-trend-account="${escapeHtml(account)}">
-      <div class="trend-periods">
-        ${TREND_PERIODS.map(p => `<button class="trend-period-btn ${p.key === period ? "active" : ""}" data-trend-account="${escapeHtml(account)}" data-trend-period="${p.key}" type="button">${p.label}</button>`).join("")}
-      </div>
       <div class="trend-legend">
         <span class="trend-legend-item asset"><i></i>자산</span>
         <span class="trend-legend-item principal"><i></i>원금</span>
-        <span class="trend-selected-date">${selected?.date ? formatTrendDateLabel(selected.date) : ""}</span>
+        <span class="trend-selected-date">${model.selected?.date ? formatTrendDateLabel(model.selected.date) : ""}</span>
       </div>
       <div class="chart-wrap trend-chart-wrap" data-trend-account="${escapeHtml(account)}">
-        ${renderAssetTrendChart(sampled, selected, range, period)}
+        ${renderAssetTrendChart(model.sampled, model.selected, model.range, model.period)}
+      </div>
+      <div class="trend-slider-wrap" style="--trend-slider-left:${model.sliderLeftPct}%;--trend-slider-right:${model.sliderRightPct}%">
+        <input
+          class="trend-date-slider"
+          data-trend-slider
+          data-trend-account="${escapeHtml(account)}"
+          type="range"
+          min="${model.sliderMin}"
+          max="${model.sliderMax}"
+          step="1"
+          value="${model.sliderValue}"
+          style="--trend-slider-progress:${progress}%"
+          aria-label="${escapeHtml(account)} 날짜 선택"
+        />
+      </div>
+      <div class="trend-periods">
+        ${TREND_PERIODS.map(p => `<button class="trend-period-btn ${p.key === model.period ? "active" : ""}" data-trend-account="${escapeHtml(account)}" data-trend-period="${p.key}" type="button">${p.label}</button>`).join("")}
       </div>
     </div>
   `;
 }
-
 function attachTrendEvents() {
-  document.querySelectorAll("[data-trend-mode]").forEach(btn => {
+  document.querySelectorAll("[data-timeline-mode]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      const mode = btn.dataset.trendMode || "trend";
-      state.trendMode = mode;
-      state.touchedTrendPoint = null;
-
-      if (mode !== "trend") {
-        await loadSnapshotDetailForDate(state.trendHistoryDate || latestSnapshotDate_());
-      }
-
+      state.timelineMode = btn.dataset.timelineMode || "historyAsset";
+      await loadSnapshotDetailForDate(state.trendHistoryDate || latestSnapshotDate_());
       render();
     });
   });
@@ -2893,64 +3025,57 @@ function attachTrendEvents() {
     btn.addEventListener("click", () => {
       const account = btn.dataset.trendAccount || "전체계좌";
       setTrendPeriodFor(account, btn.dataset.trendPeriod);
-      state.touchedTrendPoint = null;
+      if (state.trendSelectedDateByAccount) delete state.trendSelectedDateByAccount[account];
       render();
     });
   });
 
-  document.querySelectorAll(".trend-chart-wrap").forEach(chart => {
-    chart.addEventListener("pointerdown", e => {
-      chart.setPointerCapture?.(e.pointerId);
-      handleChartPointer(e);
-    });
-
-    chart.addEventListener("pointermove", e => {
-      if (e.buttons || e.pressure > 0) handleChartPointer(e);
-    });
-
-    chart.addEventListener("pointerup", () => {
-      state.touchedTrendPoint = null;
-      render();
-    });
-
-    chart.addEventListener("pointercancel", () => {
-      state.touchedTrendPoint = null;
-      render();
-    });
+  document.querySelectorAll("[data-trend-slider]").forEach(slider => {
+    slider.addEventListener("input", () => updateTrendSliderSelection_(slider));
+    slider.addEventListener("change", () => updateTrendSliderSelection_(slider));
   });
 }
 
-function handleChartPointer(e) {
-  const account = e.currentTarget.dataset.trendAccount || "전체계좌";
-  const raw = trendSnapshotPointsFor(account);
-  const points = mergeTodayPoint(raw, currentTrendPoint(account));
-  const period = trendPeriodFor(account);
-  const range = trendRange(period, points);
-  const filtered = sampleTrendPoints(filterTrendPoints(points, range), maxTrendPointCount(period));
-  if (!filtered.length) return;
+function updateTrendSliderSelection_(slider) {
+  const account = slider.dataset.trendAccount || "전체계좌";
+  const model = trendChartModel_(account);
+  const requestedSerial = Number(slider.value || model.sliderMax);
+  let selected = model.sampled[0] || null;
+  let bestDiff = selected ? Math.abs(trendDaySerial_(selected.date) - requestedSerial) : Infinity;
 
-  const rect = e.currentTarget.getBoundingClientRect();
-  const plot = trendPlotGeometry_();
-  const plotLeftPx = rect.width * (plot.left / plot.width);
-  const plotRightPx = rect.width * (plot.right / plot.width);
-  const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left - plotLeftPx) / Math.max(1, plotRightPx - plotLeftPx)));
-  const domain = trendDomainMs_(range);
-  const targetMs = domain.start + ratio * Math.max(1, domain.end - domain.start);
-
-  let best = filtered[0];
-  let bestDiff = Math.abs(parseDateKey(best.date).getTime() - targetMs);
-  filtered.forEach(p => {
-    const diff = Math.abs(parseDateKey(p.date).getTime() - targetMs);
+  model.sampled.forEach(point => {
+    const diff = Math.abs(trendDaySerial_(point.date) - requestedSerial);
     if (diff < bestDiff) {
-      best = p;
+      selected = point;
       bestDiff = diff;
     }
   });
 
-  state.touchedTrendPoint = { account, date: best.date };
-  render();
-}
+  if (!selected) return;
+  const selectedSerial = trendDaySerial_(selected.date);
+  slider.value = String(selectedSerial);
 
+  if (!state.trendSelectedDateByAccount) state.trendSelectedDateByAccount = {};
+  state.trendSelectedDateByAccount[account] = selected.date;
+
+  const card = slider.closest(".chart-account-card");
+  if (!card) return;
+
+  const summaryEl = card.querySelector("[data-chart-summary]");
+  if (summaryEl) summaryEl.innerHTML = renderChartSummaryBody_(selected);
+
+  const dateEl = card.querySelector(".trend-selected-date");
+  if (dateEl) dateEl.textContent = formatTrendDateLabel(selected.date);
+
+  const chartEl = card.querySelector(".trend-chart-wrap");
+  if (chartEl) {
+    chartEl.innerHTML = renderAssetTrendChart(model.sampled, selected, model.range, model.period);
+  }
+
+  const sliderSpan = Math.max(0, model.sliderMax - model.sliderMin);
+  const progress = sliderSpan ? ((selectedSerial - model.sliderMin) / sliderSpan) * 100 : 100;
+  slider.style.setProperty("--trend-slider-progress", progress + "%");
+}
 function renderAssetTrendChart(points, selected, range, period = state.trendPeriod) {
   const plot = trendPlotGeometry_();
   const width = plot.width;
@@ -3031,7 +3156,7 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
       <path class="trend-asset-line" d="${assetLine}" />
       ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
     </svg>
-    ${renderTrendYLabels_(formatCompactWon(max), "0원", yLabelX, padTop, plotBottom, width, height)}
+    ${renderTrendYLabels_(formatTrendAxisWon_(max), "0원", yLabelX, padTop, plotBottom, width, height)}
     <div class="trend-x-labels">
       ${tickItems.map(t => `<span style="left:${(t.x / width) * 100}%">${escapeHtml(t.label)}</span>`).join("")}
     </div>
@@ -3083,10 +3208,18 @@ function renderTrendYLabels_(topText, bottomText, x, topY, bottomY, width, heigh
 
   return `
     <div class="trend-y-labels" aria-hidden="true">
-      <span class="trend-y-label-html top" style="left:${leftPct}%;top:${topPct}%">${escapeHtml(topText)}</span>
-      <span class="trend-y-label-html bottom" style="left:${leftPct}%;top:${bottomPct}%">${escapeHtml(bottomText)}</span>
+      <span class="trend-y-label-html top" style="left:${leftPct}%;top:${topPct}%">${renderTrendYLabelText_(topText)}</span>
+      <span class="trend-y-label-html bottom" style="left:${leftPct}%;top:${bottomPct}%">${renderTrendYLabelText_(bottomText)}</span>
     </div>
   `;
+}
+
+function renderTrendYLabelText_(text) {
+  const value = String(text || "");
+  const match = value.match(/^(.*?)(억|만원|원)$/);
+  if (!match) return `<span>${escapeHtml(value)}</span>`;
+
+  return `<span>${escapeHtml(match[1])}</span><span>${escapeHtml(match[2])}</span>`;
 }
 
 function trendDomainMs_(range) {
@@ -3156,13 +3289,22 @@ function normalizeTrendSnapshot(r) {
   const accountNo = String(r.accountNo || r.accountNumber || r["계좌번호"] || "").trim();
   const account = String(r.account || r["계좌"] || "").trim();
   const totalAsset = Number(r.totalAsset ?? r.valueKrw ?? r.valueKRW ?? r["평가금액_KRW"] ?? r["평가금액"] ?? 0);
-  const principal = Number(r.principal ?? r.basis ?? r.principalKrw ?? r["입금원금_KRW"] ?? r["평가원금_KRW"] ?? 0);
-  const profit = Number(r.profit ?? r.accountProfit ?? r["계좌수익_KRW"] ?? (totalAsset - principal));
-  const profitRate = Number(r.profitRate ?? r.accountProfitRate ?? r["계좌수익률"] ?? (principal ? profit / principal : 0));
+  const principalKrw = Number(r.principalKrw ?? r["평가원금_KRW"] ?? r["평가원금"] ?? 0);
+  const basis = Number(r.basis ?? r.principal ?? r["입금원금_KRW"] ?? principalKrw);
+  const evalProfit = Number(r.evalProfit ?? r["평가손익_KRW"] ?? (totalAsset - principalKrw));
+  const evalProfitRate = Number(r.evalProfitRate ?? r["평가수익률"] ?? (principalKrw ? evalProfit / principalKrw : 0));
+  const accountProfit = Number(r.accountProfit ?? r.profit ?? r["계좌수익_KRW"] ?? (totalAsset - basis));
+  const accountProfitRate = Number(r.accountProfitRate ?? r.profitRate ?? r["계좌수익률"] ?? (basis ? accountProfit / basis : 0));
   const dayProfit = Number(r.dayProfit ?? r["일간손익_KRW"] ?? 0);
   const dayProfitRate = Number(r.dayProfitRate ?? r["일간수익률"] ?? 0);
 
-  return { date, scope, accountNo, account, totalAsset, principal, profit, profitRate, dayProfit, dayProfitRate };
+  return {
+    date, scope, accountNo, account, totalAsset,
+    principal: basis, principalKrw, basis,
+    profit: accountProfit, profitRate: accountProfitRate,
+    evalProfit, evalProfitRate, accountProfit, accountProfitRate,
+    dayProfit, dayProfitRate
+  };
 }
 
 function currentTrendPoint(account) {
@@ -3173,8 +3315,14 @@ function currentTrendPoint(account) {
     account,
     totalAsset: s.total,
     principal: s.basis,
+    principalKrw: s.principalKrw,
+    basis: s.basis,
     profit: s.accountProfit,
     profitRate: s.accountProfitRate,
+    evalProfit: s.evalProfit,
+    evalProfitRate: s.evalProfitRate,
+    accountProfit: s.accountProfit,
+    accountProfitRate: s.accountProfitRate,
     dayProfit: s.dayProfit,
     dayProfitRate: s.dayProfitRate,
     isLive: true
@@ -3182,8 +3330,8 @@ function currentTrendPoint(account) {
 }
 
 function mergeTodayPoint(points, todayPoint) {
-  const list = [...points];
-  if (!list.some(p => p.date === todayPoint.date)) list.push(todayPoint);
+  const list = points.filter(point => point.date !== todayPoint.date);
+  list.push(todayPoint);
   return list.sort((a, b) => a.date.localeCompare(b.date));
 }
 
@@ -3214,9 +3362,9 @@ function maxTrendPointCount(period) {
 }
 
 function trendSelectedPoint(account, points) {
-  const t = state.touchedTrendPoint;
-  if (!t || t.account !== account) return null;
-  return points.find(p => p.date === t.date) || null;
+  const selectedDate = state.trendSelectedDateByAccount?.[account] || "";
+  if (!selectedDate) return null;
+  return points.find(point => point.date === selectedDate) || null;
 }
 
 function trendRange(period, points = []) {
@@ -3379,7 +3527,14 @@ function niceTrendMax(value) {
 function formatCompactWon(v) {
   return formatCompactKrwAmount_(v);
 }
+function formatTrendAxisWon_(value) {
+  const n = Number(value || 0);
+  const abs = Math.abs(n);
+  if (abs < 10_000_000) return formatCompactKrwAmount_(n);
 
+  const sign = n < 0 ? "-" : "";
+  return sign + (abs / 100_000_000).toFixed(2) + "억";
+}
 /* =========================================================
    Formatters / utilities
 ========================================================= */
