@@ -1322,6 +1322,20 @@ button {
   white-space: nowrap;
 }
 
+.trend-selected-asset-label {
+  position: absolute;
+  display: inline-flex;
+  gap: var(--trend-y-label-unit-gap);
+  transform: translateY(-50%);
+  font-family: var(--font-53-family);
+  font-size: var(--font-53-size);
+  font-weight: var(--font-53-weight);
+  color: var(--trend-asset-color);
+  letter-spacing: var(--font-53-letter-spacing);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .trend-principal-line {
   fill: none;
   stroke: var(--trend-principal-color);

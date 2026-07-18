@@ -51,7 +51,7 @@ const NAV_ICONS = {
 
 const state = {
   activeTab: "watchlist",
-  trendPeriod: "month",
+  trendPeriod: "max",
   trendPeriodByAccount: {},
   trendSelectedDateByAccount: {},
   data: null,
@@ -1744,7 +1744,7 @@ function renderPortfolioSummaryCard(extraHtml = "", className = "") {
   return `
     <section class="portfolio-summary-card ${className}">
       
-    <div class="top-card-title">TOTAL PORTFOLIO</div>
+    <div class="top-card-title">TOTAL PORTFOLIO</div> 
 
 
       <div class="top-card-body">
@@ -2892,7 +2892,7 @@ function trendPointSummary_(point) {
 }
 
 function trendPeriodFor(account) {
-  return state.trendPeriodByAccount?.[account] || state.trendPeriod || "month";
+  return state.trendPeriodByAccount?.[account] || state.trendPeriod || "max";
 }
 
 function setTrendPeriodFor(account, period) {
@@ -3154,9 +3154,10 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
       <path class="trend-asset-area" d="${assetArea}" fill="url(#${id}-asset)" />
       <path class="trend-principal-line" d="${principalLine}" />
       <path class="trend-asset-line" d="${assetLine}" />
-      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
+      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><line class="trend-touch-line" x1="${plotLeft}" y1="${selectedPoint.assetY}" x2="${plotRight}" y2="${selectedPoint.assetY}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
     </svg>
     ${renderTrendYLabels_(formatTrendAxisWon_(max), "0원", yLabelX, padTop, plotBottom, width, height)}
+    ${selectedPoint ? renderTrendSelectedAssetLabel_(selectedPoint.totalAsset, yLabelX, selectedPoint.assetY, width, height) : ""}
     <div class="trend-x-labels">
       ${tickItems.map(t => `<span style="left:${(t.x / width) * 100}%">${escapeHtml(t.label)}</span>`).join("")}
     </div>
@@ -3210,6 +3211,20 @@ function renderTrendYLabels_(topText, bottomText, x, topY, bottomY, width, heigh
     <div class="trend-y-labels" aria-hidden="true">
       <span class="trend-y-label-html top" style="left:${leftPct}%;top:${topPct}%">${renderTrendYLabelText_(topText)}</span>
       <span class="trend-y-label-html bottom" style="left:${leftPct}%;top:${bottomPct}%">${renderTrendYLabelText_(bottomText)}</span>
+    </div>
+  `;
+}
+
+function renderTrendSelectedAssetLabel_(value, x, y, width, height) {
+  const leftPct = (x / width) * 100;
+  const topPct = (y / height) * 100;
+  const amount = (Number(value || 0) / 100_000_000).toFixed(2) + "억";
+
+  return `
+    <div class="trend-y-labels" aria-hidden="true">
+      <div class="trend-selected-asset-label" style="left:${leftPct}%;top:${topPct}%">
+        ${renderTrendYLabelText_(amount)}
+      </div>
     </div>
   `;
 }
