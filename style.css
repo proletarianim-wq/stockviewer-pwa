@@ -326,13 +326,13 @@
   --box-padding-x: 8px;
   --box-padding-top: 5px;
   --box-padding-bottom: 3px;
-  --row-padding-y: 5px;
+  --row-padding-y: 8px;
 
   /* 상단 카드 */
-  --portfolio-card-padding-top: 10px;
+  --portfolio-card-padding-top: 12px;
   --portfolio-card-padding-x: 10px;
-  --portfolio-card-padding-bottom: 5px;
-  --portfolio-card-margin: 4px 0 8px;
+  --portfolio-card-padding-bottom: 12px;
+  --portfolio-card-margin: 4px 0 14px;
   --portfolio-extra-divider-margin-top: 12px;
   --portfolio-extra-divider-padding-top: 12px;
 
@@ -486,6 +486,14 @@ button {
   padding-top: 0;
 }
 
+.top-card-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
 .top-card-title {
   font-family: var(--font-04-family);
   font-size: var(--font-04-size);
@@ -496,8 +504,17 @@ button {
   margin-bottom: 8px;
 }
 
+/* 보유종목 옆, 기준날짜 표시 */
+.top-card-title-right,
+.top-card-title-right-text {
+  font-size: 11px;
+  color: var(--color-ui-muted);
+  font-weight: 400;
+  white-space: nowrap;
+}
+
 .account-content-card .top-card-title {
-  margin-bottom: 8;
+  margin-bottom: 0;
 }
 
 .account-content-card-body {
@@ -1611,6 +1628,14 @@ button {
   margin: 0 0 10px;
 }
 
+.watchlist-holdings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0px 2px;
+}
+
 .watchlist-holdings-title {
   font-family: var(--font-04-family);
   font-size: var(--font-04-size);
@@ -1618,11 +1643,18 @@ button {
   color: var(--font-04-color);
   letter-spacing: var(--font-04-letter-spacing);
   line-height: 1;
-  margin: 4px 0 6px;
+  margin-bottom: 4px;
+}
+
+.watchlist-holdings-basis {
+  font-size: 11px;
+  color: var(--color-ui-muted);
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 .watchlist-group-card {
-  padding: 4px 10px;
+  padding: 10px 10px;
 }
 
 .watchlist-row {
@@ -1630,7 +1662,7 @@ button {
   grid-template-columns: var(--watchlist-columns);
   gap: 5px;
   align-items: center;
-  padding: 4px 0;
+  padding: 4px  0;
   border-bottom: 1px solid var(--color-line);
 }
 
