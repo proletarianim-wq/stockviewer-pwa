@@ -1,5 +1,6 @@
 {
-  "apiUrl": "https://script.google.com/macros/s/AKfycbz-USNQBgA2c-32OVjQGVZSiBKzP8a5fWGa0vsCWDdUlwu9JhcbqPUpD8k6FCFaB5LCpg/exec",
+  "apiUrl": "https://script.google.com/macros/s/AKfycbxETMde1crq3kYlbbFbnOIWMHrU6-FTaaSUTPGlTs8RdMaRj1pLD1i4MIcgoUQVThhlFg/exec",
+  
   "token": "my-stock-viewer-1234",
   "smallWeightThreshold": 0.01,
   "kisThrottleMs": 10,

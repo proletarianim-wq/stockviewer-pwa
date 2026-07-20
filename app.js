@@ -51,7 +51,7 @@ const NAV_ICONS = {
 
 const state = {
   activeTab: "watchlist",
-  trendPeriod: "month",
+  trendPeriod: "max",
   trendPeriodByAccount: {},
   trendSelectedDateByAccount: {},
   data: null,
@@ -843,6 +843,7 @@ function mergeWorkerQuoteData_(liveData = {}, closeData = null, meta = {}) {
     debugTiming: {
       ...(liveData.debugTiming || {}),
       overseasDailyClose: closeData?.debugTiming || null,
+      overseasDailyCloseTradeDate: normalizeMarketDateKey_(closeData?.tradeDate),
       marketStatus: meta.marketStatus || null,
       useDailyClose: !!meta.useDailyClose,
       totalTargetCount: meta.totalTargetCount || 0,
@@ -1212,6 +1213,26 @@ function buildMockSnapshotDetail_(date = "") {
     ok: true,
     date: d,
     availableDates: [d],
+    total: summary("전체계좌"),
+    accounts,
+    holdings: clone(holdings())
+  };
+}
+
+function buildLiveTimelineDetail_() {
+  const date = koreaTodayKey_();
+  const accounts = accountNames().map((account, idx) => ({
+    account,
+    accountNo: splitAccountLabel(account).no,
+    colorKey: accountClass(account, idx),
+    summary: summary(account)
+  }));
+
+  return {
+    ok: true,
+    isLive: true,
+    date,
+    availableDates: snapshotAvailableDates_(),
     total: summary("전체계좌"),
     accounts,
     holdings: clone(holdings())
@@ -1671,41 +1692,89 @@ function summary(account = "전체계좌") {
 
 function dayProfit(items) {
   const policy = dailyProfitPolicy_(new Date());
-  if (policy === "none") return { amount: 0, rate: 0 };
-
   let amount = 0, prevValue = 0;
+
   items.forEach(i => {
     if (isCash(i.symbol)) return;
-    if (!shouldIncludeInDailyProfit_(i, policy)) return;
 
-    const r = Number(i.dayChangeRate || 0);
-    const value = Number(i.valueKrw || 0);
-    if (!Number.isFinite(r) || r <= -0.99 || !value) return;
+    const quantity = Number(i.quantity || 0);
+    const fxRate = Number(i.fxRate || 1);
+    const currentPrice = Number(i.currentPrice || 0);
+    const changeAmount = Number(i.dayChangeAmount || 0);
+    const changeRate = Number(i.dayChangeRate || 0);
 
-    const prev = value / (1 + r);
-    amount += value - prev;
-    prevValue += prev;
+    if (!Number.isFinite(quantity) || !Number.isFinite(fxRate) || !quantity || !fxRate) return;
+
+    // 현재 보유수량을 전장에도 보유했다고 가정합니다.
+    // API의 주당 전장대비 등락액을 우선 사용하여 종목행 손익과 상단 합계를 일치시킵니다.
+    let previousPrice = currentPrice - changeAmount;
+    if ((!Number.isFinite(previousPrice) || previousPrice <= 0) && Number.isFinite(changeRate) && changeRate > -0.99) {
+      previousPrice = currentPrice / (1 + changeRate);
+    }
+    if (Number.isFinite(previousPrice) && previousPrice > 0) {
+      prevValue += previousPrice * quantity * fxRate;
+    }
+
+    if (shouldIncludeInDailyProfit_(i, policy)) {
+      amount += changeAmount * quantity * fxRate;
+    }
   });
+
   return { amount, rate: prevValue ? amount / prevValue : 0 };
 }
 
 function dailyProfitPolicy_(now) {
   const d = now || new Date();
-  const minutes = d.getHours() * 60 + d.getMinutes();
+  const minutes = koreaTimeMinutes_(d);
+  const todayKey = koreaDateKey_(d);
 
-  // 한국 투자자 체감 투자일 기준.
-  // 08:00~09:00: 새 투자일 시작 전, 일간수익률 0.
-  if (minutes >= 8 * 60 && minutes < 9 * 60) return "none";
+  // 한국시간 08:00에 오늘손익을 초기화합니다.
+  if (minutes >= 8 * 60 && minutes < 9 * 60) {
+    return { domestic: false, overseas: false };
+  }
 
-  // 종목행에서 QLD/VOO 같은 미국 종목의 오늘 손익을 표시하므로,
-  // 계좌 상단과 TOTAL PORTFOLIO의 오늘 손익도 같은 기준으로 전 종목을 반영합니다.
-  return "all";
+  // 국내 손익은 거래일 09:00부터 다음 날 08:00까지 유지합니다.
+  const domesticDateKey = minutes < 8 * 60
+    ? koreaAddDays_(todayKey, -1)
+    : todayKey;
+  const domestic = (minutes < 8 * 60 || minutes >= 9 * 60) &&
+    isKoreaTradingDay_(domesticDateKey);
+
+  // 미국 손익은 정규장 개장부터 다음 한국시간 08:00까지 유지합니다.
+  const marketStatus = currentUsMarketStatusForProfit_(d);
+  const overseas = minutes < 8 * 60
+    ? hasUsSessionStarted_(marketStatus)
+    : !!marketStatus.isRegularOpen;
+
+  return { domestic, overseas };
 }
 
 function shouldIncludeInDailyProfit_(item, policy) {
-  if (policy === "all") return true;
-  if (policy === "domestic") return isDomesticMarketItem_(item);
-  return false;
+  return isDomesticMarketItem_(item)
+    ? !!policy?.domestic
+    : !!policy?.overseas;
+}
+
+function currentUsMarketStatusForProfit_(now) {
+  const serverStatus = state.data?.debugTiming?.marketStatus;
+  if (serverStatus && isValidYmdKey_(serverStatus.marketDate)) return serverStatus;
+  return getLocalUsMarketStatus_(now);
+}
+
+function hasUsSessionStarted_(marketStatus) {
+  if (!marketStatus || marketStatus.isWeekend || marketStatus.isHoliday) return false;
+  if (marketStatus.isRegularOpen || marketStatus.reason === "after_hours") return true;
+
+  const [hour, minute] = String(marketStatus.marketTime || "")
+    .split(":")
+    .slice(0, 2)
+    .map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return false;
+
+  const [openHour, openMinute] = String(marketStatus.regularOpen || "09:30")
+    .split(":")
+    .map(Number);
+  return hour * 60 + minute >= openHour * 60 + openMinute;
 }
 
 function isDomesticMarketItem_(item) {
@@ -1752,17 +1821,27 @@ function renderPortfolioSummaryCard(extraHtml = "", className = "") {
           <div class="amount-main">${formatWon(s.total)}</div>
           <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
         </div>
-        ${renderProfitList(s)}
+        ${renderPortfolioProfitColumn_(s, true)}
       </div>
       ${extraHtml ? `<div class="portfolio-summary-extra">${extraHtml}</div>` : ""}
     </section>
   `;
 }
 
+function renderPortfolioProfitColumn_(s, showPriceBasis = false, priceBasisText = "") {
+  const basisText = showPriceBasis ? (priceBasisText || renderPriceBasisText()) : "";
+  return `
+    <div class="portfolio-profit-column ${showPriceBasis ? "with-price-basis" : ""}">
+      ${renderProfitList(s)}
+      ${showPriceBasis ? `<div class="portfolio-price-basis">${escapeHtml(basisText)}</div>` : ""}
+    </div>
+  `;
+}
+
 function renderProfitList(s) {
   return `
     <div class="summary-profit-list">
-      ${profitRow(s.dayProfit, s.dayProfitRate, "전일대비")}
+      ${profitRow(s.dayProfit, s.dayProfitRate, "오늘손익")}
       ${profitRow(s.evalProfit, s.evalProfitRate, "투자손익")}
       ${profitRow(s.accountProfit, s.accountProfitRate, "원금대비")}
     </div>
@@ -1789,7 +1868,7 @@ function renderAccountSection(account, html, index = 0) {
   `;
 }
 
-function renderAccountContentCard(account, html, index = 0, className = "") {
+function renderAccountContentCard(account, html, index = 0, className = "", titleRightHtml = "") {
   /*
     보유/비중 탭용 공통 카드.
     기존 바깥 account-tab을 쓰지 않고,
@@ -1799,7 +1878,10 @@ function renderAccountContentCard(account, html, index = 0, className = "") {
 
   return `
     <section class="portfolio-summary-card account-content-card ${className} ${accountClass(account, index)}">
-      <div class="top-card-title">${escapeHtml(title)}</div>
+      <div class="top-card-title-row">
+        <div class="top-card-title">${escapeHtml(title)}</div>
+        ${titleRightHtml ? `<div class="top-card-title-right">${titleRightHtml}</div>` : ""}
+      </div>
       <div class="account-content-card-body">${html}</div>
     </section>
   `;
@@ -1890,7 +1972,9 @@ function renderWatchlistHoldingsGroup() {
   if (!items.length) {
     return `
       <section class="watchlist-group-card watchlist-holdings-card">
-        <div class="watchlist-holdings-title">보유종목</div>
+        <div class="watchlist-holdings-header">
+          <div class="watchlist-holdings-title">보유종목</div>
+        </div>
         <div class="muted watchlist-empty">표시할 보유종목이 없습니다.</div>
       </section>
     `;
@@ -1898,7 +1982,9 @@ function renderWatchlistHoldingsGroup() {
 
   return `
     <section class="watchlist-group-card watchlist-holdings-card">
-      <div class="watchlist-holdings-title">보유종목</div>
+      <div class="watchlist-holdings-header">
+        <div class="watchlist-holdings-title">보유종목</div>
+      </div>
       ${items.map(renderWatchlistRow).join("")}
     </section>
   `;
@@ -1963,7 +2049,7 @@ function renderAssetTab() {
   */
   const topHtml = renderPortfolioSummaryCard("", "asset-top-card");
   const allHoldingsHtml = renderAccountContentCard(
-    "전체 보유 종목",
+    "보유종목",
     renderAssetAccountDetails("전체계좌"),
     0,
     "asset-all-holdings-card"
@@ -2029,8 +2115,8 @@ function renderAssetAccountDetails(account) {
 /*
   현재 자산탭 종목행: 3열 × 3행
   1열: 종목명
-  2열: 현재가 / 오늘 등락 / 평균가·수량
-  3열: 자산금액 / 오늘 손익 / 평가손익
+  2열: 현재가 / 전장 등락 / 평균가·수량
+  3열: 자산금액 / 전장대비 손익 / 평가손익
 */
 function renderLiveAssetRow(i) {
   const profitClass = Number(i.profit || 0) >= 0 ? "profit" : "loss";
@@ -2062,7 +2148,7 @@ function renderLiveAssetRow(i) {
       <div class="asset-live-value">
         <div class="asset-amount">${formatWon(i.valueKrw)}</div>
         <div class="asset-live-today">
-          <span class="asset-live-label">전일대비</span>
+          <span class="asset-live-label">전장대비</span>
           <span class="${dayClass}">${formatWonSign(dayProfitKrw)}</span>
         </div>
         <div class="asset-profit ${profitClass}">
@@ -2356,7 +2442,7 @@ function renderChartPortfolioCard() {
     <section class="portfolio-summary-card chart-account-card chart-total-card">
       <div class="top-card-title">TOTAL PORTFOLIO</div>
       <div class="chart-summary-body" data-chart-summary>
-        ${renderChartSummaryBody_(model.selected)}
+        ${renderChartSummaryBody_(model.selected, true)}
       </div>
       <div class="portfolio-summary-extra">
         ${renderTrendGraphPanel("전체계좌", model)}
@@ -2407,7 +2493,7 @@ function renderHistoricalAssetView() {
 
   const topHtml = renderHistoricalPortfolioSummaryCard("전체계좌", "", "asset-top-card");
   const allHoldingsHtml = renderAccountContentCard(
-    "전체 보유 종목",
+    "보유종목",
     renderHistoricalAssetAccountDetails("전체계좌"),
     0,
     "asset-all-holdings-card"
@@ -2480,20 +2566,35 @@ function renderHistoricalWeightView() {
 }
 function renderHistoricalPortfolioSummaryCard(account, extraHtml = "", className = "") {
   const s = historicalSummary_(account);
+  const isTotal = account === "전체계좌";
 
   return `
     <section class="portfolio-summary-card ${className}">
-      <div class="top-card-title">${account === "전체계좌" ? "TOTAL PORTFOLIO" : escapeHtml(account)}</div>
+      <div class="top-card-title">${isTotal ? "TOTAL PORTFOLIO" : escapeHtml(account)}</div>
       <div class="top-card-body">
         <div>
           <div class="amount-main">${formatWon(s.total)}</div>
           <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
         </div>
-        ${renderProfitList(s)}
+        ${isTotal
+          ? renderPortfolioProfitColumn_(s, true, renderHistoricalPriceBasisText_(s))
+          : renderProfitList(s)}
       </div>
       ${extraHtml ? `<div class="portfolio-summary-extra">${extraHtml}</div>` : ""}
     </section>
   `;
+}
+
+function renderHistoricalPriceBasisText_(summary) {
+  const detail = snapshotDetailOrEmpty_();
+  if (detail?.isLive) return renderPriceBasisText();
+
+  const fallbackDate = detail?.date || state.trendHistoryDate || "";
+  const domesticDate = String(summary?.domesticBasisDate || detail?.total?.domesticBasisDate || fallbackDate).slice(0, 10);
+  const usDate = String(summary?.usBasisDate || detail?.total?.usBasisDate || fallbackDate).slice(0, 10);
+  const domesticLabel = formatHistoryShortDateLabelWithDay_(domesticDate);
+  const usLabel = formatHistoryShortDateLabelWithDay_(usDate);
+  return `국내 ${domesticLabel} / 미국 ${usLabel} 장마감가 기준`;
 }
 
 function renderHistoricalAssetAccountContent(account) {
@@ -2529,15 +2630,27 @@ function renderHistoricalAssetRow(item) {
   const quantity = Number(item?.quantity || 0);
   const fxRate = Number(item?.fxRate || 1);
   const dayProfit = Number(item?.dayProfit || 0);
-  const dayChangeAmount = quantity && fxRate ? dayProfit / quantity / fxRate : 0;
+  const storedDayChangeAmount = Number(item?.dayChangeAmount);
+  const hasStoredDayChangeAmount = item?.dayChangeAmount !== null &&
+    item?.dayChangeAmount !== undefined &&
+    Number.isFinite(storedDayChangeAmount);
+  const dayChangeAmount = hasStoredDayChangeAmount
+    ? storedDayChangeAmount
+    : (quantity && fxRate ? dayProfit / quantity / fxRate : 0);
+  const hasStoredDayChangeRate = item?.dayChangeRate !== null && item?.dayChangeRate !== undefined;
 
   return renderLiveAssetRow({
     ...item,
     dayChangeAmount,
-    dayChangeRate: Number(item?.dayProfitRate || item?.dayChangeRate || 0)
+    dayChangeRate: Number(hasStoredDayChangeRate ? item.dayChangeRate : item?.dayProfitRate || 0)
   });
 }
 function buildSnapshotDetailFromCachedSnapshots_(requestedDate = "") {
+  const today = koreaTodayKey_();
+  if (!requestedDate || requestedDate === today) {
+    return buildLiveTimelineDetail_();
+  }
+
   const normalized = (state.data?.snapshots || [])
     .map(normalizeSnapshotDetailFromCache_)
     .filter(Boolean);
@@ -2600,6 +2713,16 @@ function normalizeSnapshotDetailFromCache_(r) {
   const accountProfitRate = Number(r.accountProfitRate ?? r["계좌수익률"] ?? (basis ? accountProfit / basis : 0));
   const dayProfit = Number(r.dayProfit ?? r["일간손익_KRW"] ?? 0);
   const dayProfitRate = Number(r.dayProfitRate ?? r["일간수익률"] ?? 0);
+  const rawDayChangeAmount = r.dayChangeAmount ?? r["주당전장대비"];
+  const rawDayChangeRate = r.dayChangeRate ?? r["전장등락률"];
+  const dayChangeAmount = rawDayChangeAmount === undefined || rawDayChangeAmount === null || rawDayChangeAmount === ""
+    ? null
+    : Number(rawDayChangeAmount);
+  const dayChangeRate = rawDayChangeRate === undefined || rawDayChangeRate === null || rawDayChangeRate === ""
+    ? null
+    : Number(rawDayChangeRate);
+  const domesticBasisDate = String(r.domesticBasisDate || r["국내시세기준일"] || date).slice(0, 10);
+  const usBasisDate = String(r.usBasisDate || r["미국시세기준일"] || date).slice(0, 10);
 
   if (scope === "TOTAL" || scope === "ACCOUNT") {
     return {
@@ -2616,7 +2739,9 @@ function normalizeSnapshotDetailFromCache_(r) {
         accountProfit,
         accountProfitRate,
         dayProfit,
-        dayProfitRate
+        dayProfitRate,
+        domesticBasisDate,
+        usBasisDate
       }
     };
   }
@@ -2642,8 +2767,8 @@ function normalizeSnapshotDetailFromCache_(r) {
       quantity,
       avgPrice,
       currentPrice,
-      dayChangeAmount: Number(r.dayChangeAmount ?? r["일간등락금액"] ?? 0),
-      dayChangeRate: dayProfitRate,
+      dayChangeAmount,
+      dayChangeRate,
       fxRate,
       valueKrw: total,
       principal: Number(r.principal ?? r["평가원금"] ?? avgPrice * quantity),
@@ -2651,7 +2776,9 @@ function normalizeSnapshotDetailFromCache_(r) {
       profit: evalProfit,
       profitRate: evalProfitRate,
       dayProfit,
-      dayProfitRate
+      dayProfitRate,
+      domesticBasisDate,
+      usBasisDate
     };
   }
 
@@ -2659,6 +2786,9 @@ function normalizeSnapshotDetailFromCache_(r) {
 }
 
 function snapshotDetailOrEmpty_() {
+  if (state.trendHistoryDate === koreaTodayKey_() && state.data) {
+    return buildLiveTimelineDetail_();
+  }
   return state.snapshotDetail && state.snapshotDetail.holdings ? state.snapshotDetail : null;
 }
 
@@ -2744,7 +2874,9 @@ function normalizeSummaryForClient_(s) {
     accountProfit,
     accountProfitRate: s.accountProfitRate !== undefined ? Number(s.accountProfitRate || 0) : (basis ? accountProfit / basis : 0),
     dayProfit: Number(s.dayProfit || 0),
-    dayProfitRate: Number(s.dayProfitRate || 0)
+    dayProfitRate: Number(s.dayProfitRate || 0),
+    domesticBasisDate: String(s.domesticBasisDate || "").slice(0, 10),
+    usBasisDate: String(s.usBasisDate || "").slice(0, 10)
   };
 }
 
@@ -2758,8 +2890,9 @@ function snapshotAvailableDates_() {
   const fromSnapshots = (state.data?.snapshots || [])
     .map(s => String(s.date || s.baseDate || s["기준일"] || "").slice(0, 10))
     .filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d));
+  const liveToday = state.data ? [koreaTodayKey_()] : [];
 
-  return Array.from(new Set([...fromSnapshots, ...fromDetail])).sort();
+  return Array.from(new Set([...fromSnapshots, ...fromDetail, ...liveToday])).sort();
 }
 
 function adjacentSnapshotDate_(date, step) {
@@ -2788,6 +2921,218 @@ function formatHistoryShortDateLabel_(date) {
   return `${String(d.getFullYear()).slice(2)}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
 }
 
+const KOREA_MARKET_HOLIDAYS = new Set([
+  "2025-01-01", "2025-01-27", "2025-01-28", "2025-01-29", "2025-01-30",
+  "2025-03-03", "2025-05-01", "2025-05-05", "2025-05-06", "2025-06-03",
+  "2025-06-06", "2025-08-15", "2025-10-03", "2025-10-06", "2025-10-07",
+  "2025-10-08", "2025-10-09", "2025-12-25", "2025-12-31",
+  "2026-01-01", "2026-02-16", "2026-02-17", "2026-02-18", "2026-03-02",
+  "2026-05-01", "2026-05-05", "2026-05-25", "2026-06-03", "2026-06-06", "2026-07-17",
+  "2026-08-15", "2026-08-17", "2026-09-24", "2026-09-25", "2026-09-26",
+  "2026-10-03", "2026-10-05", "2026-10-09", "2026-12-25", "2026-12-31"
+]);
+
+function renderPriceBasisText() {
+  const now = new Date();
+  const localTodayKey = koreaDateKey_(now);
+  const localMinutes = koreaTimeMinutes_(now);
+  const isLocalTradingDay = isKoreaTradingDay_(localTodayKey);
+  const isLocalPreOpen = isLocalTradingDay && localMinutes >= 8 * 60 && localMinutes < 9 * 60;
+  const localDateKey = isLocalPreOpen ? localTodayKey : getKoreaBasisDate_(now);
+  const localLabel = formatHistoryShortDateLabelWithDay_(localDateKey);
+  let localPhase = `${localLabel} 장마감가`;
+
+  if (isLocalPreOpen) {
+    localPhase = `${localLabel} 개장전`;
+  } else if (
+    localDateKey === localTodayKey &&
+    localMinutes >= 9 * 60 &&
+    localMinutes < 15 * 60 + 30
+  ) {
+    localPhase = `${localLabel} 장중현재가`;
+  }
+
+  // 우선 서버가 제공한 marketStatus를 사용하고, 없으면 로컬 폴백으로 요일 기반 추정 사용
+  let marketStatus = state.data?.debugTiming?.marketStatus;
+  if (!marketStatus || !isValidYmdKey_(marketStatus.marketDate)) {
+    marketStatus = getLocalUsMarketStatus_(new Date());
+    marketStatus._fallback = true;
+  }
+
+  const closeTradeDate = normalizeMarketDateKey_(state.data?.debugTiming?.overseasDailyCloseTradeDate);
+  const marketDate = normalizeMarketDateKey_(marketStatus.marketDate);
+  let usDateKey = marketDate;
+
+  if (!marketStatus.isRegularOpen) {
+    if (closeTradeDate) {
+      // 정규장 밖에서는 KIS 일봉 마감 시세가 실제로 가리키는 마지막 거래일을 표시합니다.
+      usDateKey = closeTradeDate;
+    } else if (marketStatus.reason !== "after_hours") {
+      // 마감 시세 거래일을 받지 못한 장 시작 전·주말·휴장일의 안전한 폴백입니다.
+      usDateKey = usPreviousWeekday_(marketDate);
+    }
+  }
+
+  const usLabel = formatHistoryShortDateLabelWithDay_(usDateKey);
+  const usPhase = marketStatus.isRegularOpen ? `${usLabel} 장중현재가` : `${usLabel} 장마감가`;
+  return `국내 ${localPhase} / 미국 ${usPhase} 기준`;
+}
+
+function isValidYmdKey_(key) {
+  return typeof key === "string" && /^\d{4}-\d{2}-\d{2}$/.test(key);
+}
+
+function normalizeMarketDateKey_(value) {
+  const digits = String(value || "").replace(/[^0-9]/g, "");
+  if (!/^\d{8}$/.test(digits)) return "";
+  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6, 8)}`;
+}
+
+function isKoreaMarketHoliday_(dateOrKey) {
+  const key = typeof dateOrKey === "string" ? dateOrKey : koreaDateKey_(dateOrKey);
+  return KOREA_MARKET_HOLIDAYS.has(key);
+}
+
+function isKoreaTradingDay_(dateOrKey) {
+  const key = typeof dateOrKey === "string" ? dateOrKey : koreaDateKey_(dateOrKey);
+  const dow = koreaDayOfWeek_(key);
+  if (dow === 0 || dow === 6) return false;
+  return !isKoreaMarketHoliday_(key);
+}
+
+function getKoreaBasisDate_(now) {
+  const todayKey = koreaDateKey_(now);
+  const minutes = koreaTimeMinutes_(now);
+
+  if (minutes < 9 * 60) {
+    return previousKoreaTradingDay_(todayKey);
+  }
+
+  return isKoreaTradingDay_(todayKey)
+    ? todayKey
+    : previousKoreaTradingDay_(todayKey);
+}
+
+function previousKoreaTradingDay_(dateOrKey) {
+  let key = typeof dateOrKey === "string" ? dateOrKey : koreaDateKey_(dateOrKey);
+  do {
+    key = koreaAddDays_(key, -1);
+  } while (!isKoreaTradingDay_(key));
+  return key;
+}
+
+function formatHistoryShortDateLabelWithDay_(dateOrKey) {
+  const key = typeof dateOrKey === "string" ? dateOrKey : koreaDateKey_(dateOrKey);
+  const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
+  const dow = koreaDayOfWeek_(key);
+  const [, month, day] = String(key).split("-").map(Number);
+  return `${month}.${day}(${dayNames[dow]})`;
+}
+
+function koreaDateParts_(date) {
+  const rawDate = date instanceof Date ? date : new Date(date);
+  const koreaMs = rawDate.getTime() + 9 * 60 * 60000;
+  const korea = new Date(koreaMs);
+  return {
+    year: korea.getUTCFullYear(),
+    month: korea.getUTCMonth() + 1,
+    monthIndex: korea.getUTCMonth(),
+    day: korea.getUTCDate(),
+    dayOfWeek: korea.getUTCDay(),
+    hours: korea.getUTCHours(),
+    minutes: korea.getUTCMinutes(),
+  };
+}
+
+function koreaDateKey_(date) {
+  const p = koreaDateParts_(date);
+  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
+}
+
+function koreaDayOfWeek_(dateOrKey) {
+  const key = typeof dateOrKey === "string" ? dateOrKey : koreaDateKey_(dateOrKey);
+  const [year, month, day] = key.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+}
+
+function koreaAddDays_(dateKey, n) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  d.setUTCDate(d.getUTCDate() + n);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+function koreaTimeMinutes_(date) {
+  const p = koreaDateParts_(date);
+  return p.hours * 60 + p.minutes;
+}
+
+function getLocalUsMarketStatus_(now = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  }).formatToParts(now);
+  const map = {};
+  parts.forEach(p => { if (p.type) map[p.type] = p.value; });
+
+  const year = Number(map.year);
+  const month = map.month;
+  const day = map.day;
+  const hour = Number(map.hour);
+  const minute = Number(map.minute);
+
+  const ymd = `${year}-${String(Number(month)).padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
+  const weekday = new Date(Date.UTC(year, Number(month) - 1, Number(day))).getUTCDay();
+  const openMinutes = 9 * 60 + 30;
+  const closeMinutes = 16 * 60;
+  const nowMinutes = hour * 60 + minute;
+  const isWeekend = weekday === 0 || weekday === 6;
+  const isRegularOpen = !isWeekend && nowMinutes >= openMinutes && nowMinutes < closeMinutes;
+  let reason = "regular_open";
+  if (isWeekend) reason = "weekend";
+  else if (nowMinutes < openMinutes) reason = "pre_market";
+  else if (nowMinutes >= closeMinutes) reason = "after_hours";
+
+  const pad = n => String(n).padStart(2, "0");
+
+  return {
+    market: "US",
+    timeZone: "America/New_York",
+    checkedAt: now.toISOString(),
+    marketDate: ymd,
+    marketTime: `${pad(hour)}:${pad(minute)}:00`,
+    isRegularOpen,
+    isWeekend,
+    reason
+  };
+}
+
+function usPreviousWeekday_(ymd) {
+  const [year, month, day] = ymd.split("-").map(Number);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  do {
+    d.setUTCDate(d.getUTCDate() - 1);
+    var wd = d.getUTCDay();
+  } while (wd === 0 || wd === 6);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function getKoreaNow_() {
+  return new Date();
+}
+
+function koreaTodayKey_() {
+  return koreaDateKey_(getKoreaNow_());
+}
 
 function yesterdayKey_() {
   return dateKey(addDays(startOfDay(new Date()), -1));
@@ -2801,10 +3146,7 @@ function historyDatePickerRange_() {
 
   const minDate = dates[0];
   const latestDate = dates[dates.length - 1];
-  const yesterday = yesterdayKey_();
-  let maxDate = latestDate < yesterday ? latestDate : yesterday;
-
-  if (maxDate < minDate) maxDate = latestDate;
+  const maxDate = latestDate;
 
   return { minDate, maxDate, latestDate };
 }
@@ -2850,7 +3192,7 @@ function renderTrendAccountContent(account) {
 
   return `
     <div class="chart-summary-body" data-chart-summary>
-      ${renderChartSummaryBody_(model.selected)}
+      ${renderChartSummaryBody_(model.selected, true)}
     </div>
     <div class="portfolio-summary-extra">
       ${renderTrendGraphPanel(account, model)}
@@ -2858,7 +3200,7 @@ function renderTrendAccountContent(account) {
   `;
 }
 
-function renderChartSummaryBody_(point) {
+function renderChartSummaryBody_(point, showPriceBasis = false) {
   const s = trendPointSummary_(point);
   return `
     <div class="top-card-body">
@@ -2866,9 +3208,21 @@ function renderChartSummaryBody_(point) {
         <div class="amount-main">${formatWon(s.total)}</div>
         <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
       </div>
-      ${renderProfitList(s)}
+      ${renderPortfolioProfitColumn_(s, showPriceBasis, renderTrendPriceBasisText_(point))}
     </div>
   `;
+}
+
+function renderTrendPriceBasisText_(point) {
+  if (point?.isLive) return renderPriceBasisText();
+
+  const fallbackDate = String(point?.date || "").slice(0, 10);
+  const domesticDate = String(point?.domesticBasisDate || fallbackDate).slice(0, 10);
+  const usDate = String(point?.usBasisDate || fallbackDate).slice(0, 10);
+  const domesticLabel = formatHistoryShortDateLabelWithDay_(domesticDate);
+  const usLabel = formatHistoryShortDateLabelWithDay_(usDate);
+
+  return `국내 ${domesticLabel} 장마감가 / 미국 ${usLabel} 장마감가 기준`;
 }
 
 function trendPointSummary_(point) {
@@ -2892,7 +3246,7 @@ function trendPointSummary_(point) {
 }
 
 function trendPeriodFor(account) {
-  return state.trendPeriodByAccount?.[account] || state.trendPeriod || "month";
+  return state.trendPeriodByAccount?.[account] || state.trendPeriod || "max";
 }
 
 function setTrendPeriodFor(account, period) {
@@ -2939,7 +3293,7 @@ function renderTrendGraphPanel(account, model = trendChartModel_(account)) {
       <div class="trend-legend">
         <span class="trend-legend-item asset"><i></i>자산</span>
         <span class="trend-legend-item principal"><i></i>원금</span>
-        <span class="trend-selected-date">${model.selected?.date ? formatTrendDateLabel(model.selected.date) : ""}</span>
+        <span class="trend-selected-date">${model.selected?.date ? formatTrendDateLabel(model.selected) : ""}</span>
       </div>
       <div class="chart-wrap trend-chart-wrap" data-trend-account="${escapeHtml(account)}">
         ${renderAssetTrendChart(model.sampled, model.selected, model.range, model.period)}
@@ -3062,10 +3416,10 @@ function updateTrendSliderSelection_(slider) {
   if (!card) return;
 
   const summaryEl = card.querySelector("[data-chart-summary]");
-  if (summaryEl) summaryEl.innerHTML = renderChartSummaryBody_(selected);
+  if (summaryEl) summaryEl.innerHTML = renderChartSummaryBody_(selected, true);
 
   const dateEl = card.querySelector(".trend-selected-date");
-  if (dateEl) dateEl.textContent = formatTrendDateLabel(selected.date);
+  if (dateEl) dateEl.textContent = formatTrendDateLabel(selected);
 
   const chartEl = card.querySelector(".trend-chart-wrap");
   if (chartEl) {
@@ -3154,9 +3508,10 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
       <path class="trend-asset-area" d="${assetArea}" fill="url(#${id}-asset)" />
       <path class="trend-principal-line" d="${principalLine}" />
       <path class="trend-asset-line" d="${assetLine}" />
-      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
+      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><line class="trend-touch-line" x1="${plotLeft}" y1="${selectedPoint.assetY}" x2="${plotRight}" y2="${selectedPoint.assetY}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
     </svg>
     ${renderTrendYLabels_(formatTrendAxisWon_(max), "0원", yLabelX, padTop, plotBottom, width, height)}
+    ${selectedPoint ? renderTrendSelectedAssetLabel_(selectedPoint.totalAsset, yLabelX, selectedPoint.assetY, width, height) : ""}
     <div class="trend-x-labels">
       ${tickItems.map(t => `<span style="left:${(t.x / width) * 100}%">${escapeHtml(t.label)}</span>`).join("")}
     </div>
@@ -3210,6 +3565,20 @@ function renderTrendYLabels_(topText, bottomText, x, topY, bottomY, width, heigh
     <div class="trend-y-labels" aria-hidden="true">
       <span class="trend-y-label-html top" style="left:${leftPct}%;top:${topPct}%">${renderTrendYLabelText_(topText)}</span>
       <span class="trend-y-label-html bottom" style="left:${leftPct}%;top:${bottomPct}%">${renderTrendYLabelText_(bottomText)}</span>
+    </div>
+  `;
+}
+
+function renderTrendSelectedAssetLabel_(value, x, y, width, height) {
+  const leftPct = (x / width) * 100;
+  const topPct = (y / height) * 100;
+  const amount = (Number(value || 0) / 100_000_000).toFixed(2) + "억";
+
+  return `
+    <div class="trend-y-labels" aria-hidden="true">
+      <div class="trend-selected-asset-label" style="left:${leftPct}%;top:${topPct}%">
+        ${renderTrendYLabelText_(amount)}
+      </div>
     </div>
   `;
 }
@@ -3297,13 +3666,16 @@ function normalizeTrendSnapshot(r) {
   const accountProfitRate = Number(r.accountProfitRate ?? r.profitRate ?? r["계좌수익률"] ?? (basis ? accountProfit / basis : 0));
   const dayProfit = Number(r.dayProfit ?? r["일간손익_KRW"] ?? 0);
   const dayProfitRate = Number(r.dayProfitRate ?? r["일간수익률"] ?? 0);
+  const domesticBasisDate = String(r.domesticBasisDate || r["국내시세기준일"] || date).slice(0, 10);
+  const usBasisDate = String(r.usBasisDate || r["미국시세기준일"] || date).slice(0, 10);
 
   return {
     date, scope, accountNo, account, totalAsset,
     principal: basis, principalKrw, basis,
     profit: accountProfit, profitRate: accountProfitRate,
     evalProfit, evalProfitRate, accountProfit, accountProfitRate,
-    dayProfit, dayProfitRate
+    dayProfit, dayProfitRate,
+    domesticBasisDate, usBasisDate
   };
 }
 
@@ -3452,6 +3824,9 @@ function trendTickPercent(date, range) {
 }
 
 function parseDateKey(date) {
+  if (date instanceof Date) return startOfDay(date);
+  if (typeof date === "number") return startOfDay(new Date(date));
+
   const s = String(date || "").slice(0, 10);
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return startOfDay(new Date());
@@ -3472,9 +3847,27 @@ function addDays(d, n) { const x = new Date(d); x.setDate(x.getDate() + n); retu
 function addMonths(d, n) { const x = new Date(d); x.setMonth(x.getMonth() + n); return x; }
 function formatMonthDay(d) { return `${d.getMonth() + 1}/${d.getDate()}`; }
 function formatYearMonth(d) { return `${String(d.getFullYear()).slice(2)}/${String(d.getMonth() + 1).padStart(2, "0")}`; }
-function formatTrendDateLabel(date) {
+function formatTrendDateLabel(pointOrDate) {
+  const point = pointOrDate && typeof pointOrDate === "object" ? pointOrDate : null;
+  const date = String(point?.date || pointOrDate || "").slice(0, 10);
   const d = parseDateKey(date);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const dateText = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const weekday = ["일", "월", "화", "수", "목", "금", "토"][d.getDay()];
+
+  // 토·일은 요일만 표시하고 별도의 휴장 문구를 붙이지 않습니다.
+  if (d.getDay() === 0 || d.getDay() === 6 || !point) {
+    return `${dateText}(${weekday})`;
+  }
+
+  const domesticBasisDate = String(point.domesticBasisDate || "").slice(0, 10);
+  const usBasisDate = String(point.usBasisDate || "").slice(0, 10);
+  const domesticClosed = isValidYmdKey_(domesticBasisDate) && domesticBasisDate !== date;
+  const usClosed = isValidYmdKey_(usBasisDate) && usBasisDate !== date;
+
+  if (domesticClosed && usClosed) return `${dateText}(${weekday}, 국장/미장 휴장)`;
+  if (domesticClosed) return `${dateText}(${weekday}, 국장휴장)`;
+  if (usClosed) return `${dateText}(${weekday}, 미장휴장)`;
+  return `${dateText}(${weekday})`;
 }
 
 /*
