@@ -582,7 +582,12 @@ async function fetchQuotesFromWorker_(base, scope = "all", addProgress = null) {
 
   let closeData = null;
   if (useDailyClose && overseasDailyCloseTargets.length) {
-    closeData = await getOverseasDailyCloseQuotesWithCache_(overseasDailyCloseTargets, throttleMs, addProgress);
+    closeData = await getOverseasDailyCloseQuotesWithCache_(
+      overseasDailyCloseTargets,
+      throttleMs,
+      addProgress,
+      marketStatus
+    );
   }
 
   const merged = mergeWorkerQuoteData_(liveData, closeData, {
@@ -658,8 +663,9 @@ async function fetchLiveQuotesFromWorker_(targets, scope = "all", throttleMs = 1
   return data;
 }
 
-async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, addProgress = null) {
+async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, addProgress = null, marketStatus = null) {
   const cacheDate = todayCompactKey_();
+  const expectedTradeDate = normalizeMarketDateKey_(marketStatus?.lastCompletedTradeDate);
   const symbols = Array.from(new Set((targets || []).map(t => String(t.symbol || "").trim()).filter(Boolean)));
 
   addProgress?.("미국 정규장 마감 시세 캐시를 IndexedDB에서 확인하고 있습니다.");
@@ -671,13 +677,13 @@ async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, 
     console.warn("overseas daily close cache read failed", err);
   }
 
-  const cacheUsable = isUsableOverseasDailyCloseCache_(cached, cacheDate);
+  const cacheUsable = isUsableOverseasDailyCloseCache_(cached, cacheDate, expectedTradeDate);
   const cachedQuotes = cacheUsable
     ? { ...cached.quotes }
     : {};
 
   if (cached?.cacheDate === cacheDate && cached?.quotes && !cacheUsable) {
-    addProgress?.("기존 미국 마감 시세 캐시에 임시 환율이 들어 있어 새로 조회합니다.");
+    addProgress?.("기존 미국 마감 시세 캐시의 환율 또는 거래일이 맞지 않아 새로 조회합니다.");
   }
 
   const missingTargets = (targets || []).filter(target => {
@@ -713,6 +719,7 @@ async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, 
         cacheDate,
         source: "overseas_daily_close",
         generatedAt: fetched.generatedAt || new Date().toISOString(),
+        completedTradeDate: fetched.completedTradeDate || expectedTradeDate || "",
         tradeDate: fetched.tradeDate || cached?.tradeDate || "",
         requestedBymd: fetched.requestedBymd || "",
         usdKrw: Number(fetched.usdKrw || cached?.usdKrw || 0),
@@ -740,6 +747,7 @@ async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, 
     source: "overseas_daily_close_cache",
     cacheDate,
     tradeDate: fetched?.tradeDate || cached?.tradeDate || "",
+    completedTradeDate: fetched?.completedTradeDate || cached?.completedTradeDate || expectedTradeDate || "",
     usdKrw: Number(fetched?.usdKrw || cached?.usdKrw || 0),
     fxSource: fetched?.fxSource || cached?.fxSource || "",
     quotes,
@@ -754,8 +762,11 @@ async function getOverseasDailyCloseQuotesWithCache_(targets, throttleMs = 120, 
   };
 }
 
-function isUsableOverseasDailyCloseCache_(cached, cacheDate) {
+function isUsableOverseasDailyCloseCache_(cached, cacheDate, expectedTradeDate = "") {
   if (!cached || cached.cacheDate !== cacheDate || !cached.quotes) return false;
+
+  const cachedTradeDate = normalizeMarketDateKey_(cached.tradeDate);
+  if (expectedTradeDate && cachedTradeDate !== expectedTradeDate) return false;
 
   const fx = Number(cached.usdKrw || 0);
   const fxSource = String(cached.fxSource || "").trim();
