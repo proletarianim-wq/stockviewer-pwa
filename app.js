@@ -2952,29 +2952,39 @@ function renderPriceBasisText() {
     localPhase = `${localLabel} 장중현재가`;
   }
 
-  // 우선 서버가 제공한 marketStatus를 사용하고, 없으면 로컬 폴백으로 요일 기반 추정 사용
+  // 서버 상태는 휴장 여부에 사용하고, 개장 전/장중/마감 시간은 미국 현지시각으로 한 번 더 확인합니다.
+  // 일봉 API가 개장 전 당일 날짜의 미완성 행을 반환해도 이를 장마감가로 표시하지 않습니다.
+  const localUsStatus = getLocalUsMarketStatus_(now);
   let marketStatus = state.data?.debugTiming?.marketStatus;
   if (!marketStatus || !isValidYmdKey_(marketStatus.marketDate)) {
-    marketStatus = getLocalUsMarketStatus_(new Date());
+    marketStatus = localUsStatus;
     marketStatus._fallback = true;
   }
 
   const closeTradeDate = normalizeMarketDateKey_(state.data?.debugTiming?.overseasDailyCloseTradeDate);
-  const marketDate = normalizeMarketDateKey_(marketStatus.marketDate);
-  let usDateKey = marketDate;
+  const localMarketDate = normalizeMarketDateKey_(localUsStatus.marketDate);
+  const serverMarketDate = normalizeMarketDateKey_(marketStatus.marketDate);
+  const sameMarketDate = serverMarketDate === localMarketDate;
+  const isClosedToday = sameMarketDate && !!(marketStatus.isWeekend || marketStatus.isHoliday);
+  const isUsRegularOpen = !isClosedToday && !!localUsStatus.isRegularOpen;
+  const hasUsSessionEnded = !isClosedToday && localUsStatus.reason === "after_hours";
+  let usDateKey = localMarketDate;
 
-  if (!marketStatus.isRegularOpen) {
-    if (closeTradeDate) {
-      // 정규장 밖에서는 KIS 일봉 마감 시세가 실제로 가리키는 마지막 거래일을 표시합니다.
-      usDateKey = closeTradeDate;
-    } else if (marketStatus.reason !== "after_hours") {
-      // 마감 시세 거래일을 받지 못한 장 시작 전·주말·휴장일의 안전한 폴백입니다.
-      usDateKey = usPreviousWeekday_(marketDate);
-    }
+  if (isUsRegularOpen) {
+    usDateKey = localMarketDate;
+  } else if (hasUsSessionEnded) {
+    usDateKey = closeTradeDate && closeTradeDate <= localMarketDate
+      ? closeTradeDate
+      : localMarketDate;
+  } else {
+    // 개장 전·주말·휴장일에는 당일자로 들어온 미완성 일봉을 무시합니다.
+    usDateKey = closeTradeDate && closeTradeDate < localMarketDate
+      ? closeTradeDate
+      : usPreviousWeekday_(localMarketDate);
   }
 
   const usLabel = formatHistoryShortDateLabelWithDay_(usDateKey);
-  const usPhase = marketStatus.isRegularOpen ? `${usLabel} 장중현재가` : `${usLabel} 장마감가`;
+  const usPhase = isUsRegularOpen ? `${usLabel} 장중현재가` : `${usLabel} 장마감가`;
   return `국내 ${localPhase} / 미국 ${usPhase} 기준`;
 }
 
