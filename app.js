@@ -51,7 +51,7 @@ const NAV_ICONS = {
 
 const state = {
   activeTab: "watchlist",
-  trendPeriod: "max",
+  trendPeriod: "month",
   trendPeriodByAccount: {},
   trendSelectedDateByAccount: {},
   data: null,
@@ -1671,89 +1671,41 @@ function summary(account = "전체계좌") {
 
 function dayProfit(items) {
   const policy = dailyProfitPolicy_(new Date());
-  let amount = 0, prevValue = 0;
+  if (policy === "none") return { amount: 0, rate: 0 };
 
+  let amount = 0, prevValue = 0;
   items.forEach(i => {
     if (isCash(i.symbol)) return;
+    if (!shouldIncludeInDailyProfit_(i, policy)) return;
 
-    const quantity = Number(i.quantity || 0);
-    const fxRate = Number(i.fxRate || 1);
-    const currentPrice = Number(i.currentPrice || 0);
-    const changeAmount = Number(i.dayChangeAmount || 0);
-    const changeRate = Number(i.dayChangeRate || 0);
+    const r = Number(i.dayChangeRate || 0);
+    const value = Number(i.valueKrw || 0);
+    if (!Number.isFinite(r) || r <= -0.99 || !value) return;
 
-    if (!Number.isFinite(quantity) || !Number.isFinite(fxRate) || !quantity || !fxRate) return;
-
-    // 현재 보유수량을 전장에도 보유했다고 가정합니다.
-    // API의 주당 전장대비 등락액을 우선 사용하여 종목행 손익과 상단 합계를 일치시킵니다.
-    let previousPrice = currentPrice - changeAmount;
-    if ((!Number.isFinite(previousPrice) || previousPrice <= 0) && Number.isFinite(changeRate) && changeRate > -0.99) {
-      previousPrice = currentPrice / (1 + changeRate);
-    }
-    if (Number.isFinite(previousPrice) && previousPrice > 0) {
-      prevValue += previousPrice * quantity * fxRate;
-    }
-
-    if (shouldIncludeInDailyProfit_(i, policy)) {
-      amount += changeAmount * quantity * fxRate;
-    }
+    const prev = value / (1 + r);
+    amount += value - prev;
+    prevValue += prev;
   });
-
   return { amount, rate: prevValue ? amount / prevValue : 0 };
 }
 
 function dailyProfitPolicy_(now) {
   const d = now || new Date();
-  const minutes = koreaTimeMinutes_(d);
-  const todayKey = koreaDateKey_(d);
+  const minutes = d.getHours() * 60 + d.getMinutes();
 
-  // 한국시간 08:00에 오늘손익을 초기화합니다.
-  if (minutes >= 8 * 60 && minutes < 9 * 60) {
-    return { domestic: false, overseas: false };
-  }
+  // 한국 투자자 체감 투자일 기준.
+  // 08:00~09:00: 새 투자일 시작 전, 일간수익률 0.
+  if (minutes >= 8 * 60 && minutes < 9 * 60) return "none";
 
-  // 국내 손익은 거래일 09:00부터 다음 날 08:00까지 유지합니다.
-  const domesticDateKey = minutes < 8 * 60
-    ? koreaAddDays_(todayKey, -1)
-    : todayKey;
-  const domestic = (minutes < 8 * 60 || minutes >= 9 * 60) &&
-    isKoreaTradingDay_(domesticDateKey);
-
-  // 미국 손익은 정규장 개장부터 다음 한국시간 08:00까지 유지합니다.
-  const marketStatus = currentUsMarketStatusForProfit_(d);
-  const overseas = minutes < 8 * 60
-    ? hasUsSessionStarted_(marketStatus)
-    : !!marketStatus.isRegularOpen;
-
-  return { domestic, overseas };
+  // 종목행에서 QLD/VOO 같은 미국 종목의 오늘 손익을 표시하므로,
+  // 계좌 상단과 TOTAL PORTFOLIO의 오늘 손익도 같은 기준으로 전 종목을 반영합니다.
+  return "all";
 }
 
 function shouldIncludeInDailyProfit_(item, policy) {
-  return isDomesticMarketItem_(item)
-    ? !!policy?.domestic
-    : !!policy?.overseas;
-}
-
-function currentUsMarketStatusForProfit_(now) {
-  const serverStatus = state.data?.debugTiming?.marketStatus;
-  if (serverStatus && isValidYmdKey_(serverStatus.marketDate)) return serverStatus;
-  return getLocalUsMarketStatus_(now);
-}
-
-function hasUsSessionStarted_(marketStatus) {
-  if (!marketStatus || marketStatus.isWeekend || marketStatus.isHoliday) return false;
-  if (marketStatus.isRegularOpen || marketStatus.reason === "after_hours") return true;
-
-  const [hour, minute] = String(marketStatus.marketTime || "")
-    .split(":")
-    .slice(0, 2)
-    .map(Number);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return false;
-
-  const [openHour, openMinute] = String(marketStatus.regularOpen || "09:30")
-    .split(":")
-    .map(Number);
-  return hour * 60 + minute >= openHour * 60 + openMinute;
+  if (policy === "all") return true;
+  if (policy === "domestic") return isDomesticMarketItem_(item);
+  return false;
 }
 
 function isDomesticMarketItem_(item) {
@@ -1810,7 +1762,7 @@ function renderPortfolioSummaryCard(extraHtml = "", className = "") {
 function renderProfitList(s) {
   return `
     <div class="summary-profit-list">
-      ${profitRow(s.dayProfit, s.dayProfitRate, "오늘손익")}
+      ${profitRow(s.dayProfit, s.dayProfitRate, "전일대비")}
       ${profitRow(s.evalProfit, s.evalProfitRate, "투자손익")}
       ${profitRow(s.accountProfit, s.accountProfitRate, "원금대비")}
     </div>
@@ -1837,7 +1789,7 @@ function renderAccountSection(account, html, index = 0) {
   `;
 }
 
-function renderAccountContentCard(account, html, index = 0, className = "", titleRightHtml = "") {
+function renderAccountContentCard(account, html, index = 0, className = "") {
   /*
     보유/비중 탭용 공통 카드.
     기존 바깥 account-tab을 쓰지 않고,
@@ -1847,10 +1799,7 @@ function renderAccountContentCard(account, html, index = 0, className = "", titl
 
   return `
     <section class="portfolio-summary-card account-content-card ${className} ${accountClass(account, index)}">
-      <div class="top-card-title-row">
-        <div class="top-card-title">${escapeHtml(title)}</div>
-        ${titleRightHtml ? `<div class="top-card-title-right">${titleRightHtml}</div>` : ""}
-      </div>
+      <div class="top-card-title">${escapeHtml(title)}</div>
       <div class="account-content-card-body">${html}</div>
     </section>
   `;
@@ -1937,15 +1886,11 @@ function renderWatchlistTab() {
 */
 function renderWatchlistHoldingsGroup() {
   const items = investments(itemsFor("전체계좌"));
-  const basisText = renderPriceBasisText();
 
   if (!items.length) {
     return `
       <section class="watchlist-group-card watchlist-holdings-card">
-        <div class="watchlist-holdings-header">
-          <div class="watchlist-holdings-title">보유종목</div>
-          <div class="watchlist-holdings-basis muted">${escapeHtml(basisText)}</div>
-        </div>
+        <div class="watchlist-holdings-title">보유종목</div>
         <div class="muted watchlist-empty">표시할 보유종목이 없습니다.</div>
       </section>
     `;
@@ -1953,10 +1898,7 @@ function renderWatchlistHoldingsGroup() {
 
   return `
     <section class="watchlist-group-card watchlist-holdings-card">
-      <div class="watchlist-holdings-header">
-        <div class="watchlist-holdings-title">보유종목</div>
-        <div class="watchlist-holdings-basis muted">${escapeHtml(basisText)}</div>
-      </div>
+      <div class="watchlist-holdings-title">보유종목</div>
       ${items.map(renderWatchlistRow).join("")}
     </section>
   `;
@@ -2021,11 +1963,10 @@ function renderAssetTab() {
   */
   const topHtml = renderPortfolioSummaryCard("", "asset-top-card");
   const allHoldingsHtml = renderAccountContentCard(
-    "보유종목",
+    "전체 보유 종목",
     renderAssetAccountDetails("전체계좌"),
     0,
-    "asset-all-holdings-card",
-    `<span class="top-card-title-right-text muted">${escapeHtml(renderPriceBasisText())}</span>`
+    "asset-all-holdings-card"
   );
 
   const accountHtml = accountNames()
@@ -2088,8 +2029,8 @@ function renderAssetAccountDetails(account) {
 /*
   현재 자산탭 종목행: 3열 × 3행
   1열: 종목명
-  2열: 현재가 / 전장 등락 / 평균가·수량
-  3열: 자산금액 / 전장대비 손익 / 평가손익
+  2열: 현재가 / 오늘 등락 / 평균가·수량
+  3열: 자산금액 / 오늘 손익 / 평가손익
 */
 function renderLiveAssetRow(i) {
   const profitClass = Number(i.profit || 0) >= 0 ? "profit" : "loss";
@@ -2121,7 +2062,7 @@ function renderLiveAssetRow(i) {
       <div class="asset-live-value">
         <div class="asset-amount">${formatWon(i.valueKrw)}</div>
         <div class="asset-live-today">
-          <span class="asset-live-label">전장대비</span>
+          <span class="asset-live-label">전일대비</span>
           <span class="${dayClass}">${formatWonSign(dayProfitKrw)}</span>
         </div>
         <div class="asset-profit ${profitClass}">
@@ -2847,201 +2788,6 @@ function formatHistoryShortDateLabel_(date) {
   return `${String(d.getFullYear()).slice(2)}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
 }
 
-const KOREA_MARKET_HOLIDAYS = new Set([
-  "2026-01-01",
-  "2026-01-02",
-  "2026-02-09",
-  "2026-02-10",
-  "2026-02-11",
-  "2026-03-01",
-  "2026-05-05",
-  "2026-05-06",
-  "2026-06-06",
-  "2026-06-25",
-  "2026-07-17",
-  "2026-08-15",
-  "2026-09-12",
-  "2026-09-13",
-  "2026-09-14",
-  "2026-10-03",
-  "2026-10-09",
-  "2026-10-31",
-  "2026-12-25"
-]);
-
-function renderPriceBasisText() {
-  const now = new Date();
-  const localDateKey = getKoreaBasisDate_(now);
-  const localLabel = formatHistoryShortDateLabelWithDay_(localDateKey);
-  const localMinutes = koreaTimeMinutes_(now);
-  const isLocalToday = localDateKey === koreaTodayKey_();
-  const localPhase = isLocalToday && localMinutes >= 9 * 60 && localMinutes < 15 * 60 + 30
-    ? `${localLabel} 장중`
-    : `${localLabel} 장마감`;
-
-  // 우선 서버가 제공한 marketStatus를 사용하고, 없으면 로컬 폴백으로 요일 기반 추정 사용
-  let marketStatus = state.data?.debugTiming?.marketStatus;
-  if (!marketStatus || !isValidYmdKey_(marketStatus.marketDate)) {
-    marketStatus = getLocalUsMarketStatus_(new Date());
-    marketStatus._fallback = true;
-  }
-
-  // 폴백일 때 주말(토/일)이라면 직전 평일(금요일)로 기준일을 변경
-  if (marketStatus._fallback && marketStatus.isWeekend) {
-    marketStatus.marketDate = usPreviousWeekday_(marketStatus.marketDate);
-    marketStatus.isRegularOpen = false;
-  }
-
-  const usDateKey = marketStatus.marketDate;
-  const usLabel = formatHistoryShortDateLabelWithDay_(usDateKey);
-  const usPhase = marketStatus.isRegularOpen ? `${usLabel} 장중` : `${usLabel} 장마감`;
-  return `국내 ${localPhase} / 미국 ${usPhase} 기준`;
-}
-
-function isValidYmdKey_(key) {
-  return typeof key === "string" && /^\d{4}-\d{2}-\d{2}$/.test(key);
-}
-
-function isKoreaMarketHoliday_(dateOrKey) {
-  const key = typeof dateOrKey === "string" ? dateOrKey : koreaDateKey_(dateOrKey);
-  return KOREA_MARKET_HOLIDAYS.has(key);
-}
-
-function isKoreaTradingDay_(dateOrKey) {
-  const key = typeof dateOrKey === "string" ? dateOrKey : koreaDateKey_(dateOrKey);
-  const dow = koreaDayOfWeek_(key);
-  if (dow === 0 || dow === 6) return false;
-  return !isKoreaMarketHoliday_(key);
-}
-
-function getKoreaBasisDate_(now) {
-  const todayKey = koreaDateKey_(now);
-  const minutes = koreaTimeMinutes_(now);
-
-  if (minutes < 9 * 60) {
-    return previousKoreaTradingDay_(todayKey);
-  }
-
-  return isKoreaTradingDay_(todayKey)
-    ? todayKey
-    : previousKoreaTradingDay_(todayKey);
-}
-
-function previousKoreaTradingDay_(dateOrKey) {
-  let key = typeof dateOrKey === "string" ? dateOrKey : koreaDateKey_(dateOrKey);
-  do {
-    key = koreaAddDays_(key, -1);
-  } while (!isKoreaTradingDay_(key));
-  return key;
-}
-
-function formatHistoryShortDateLabelWithDay_(dateOrKey) {
-  const key = typeof dateOrKey === "string" ? dateOrKey : koreaDateKey_(dateOrKey);
-  const dayNames = ["일", "월", "화", "수", "목", "금", "토"];
-  const dow = koreaDayOfWeek_(key);
-  const [, month, day] = String(key).split("-").map(Number);
-  return `${month}.${day}(${dayNames[dow]})`;
-}
-
-function koreaDateParts_(date) {
-  const rawDate = date instanceof Date ? date : new Date(date);
-  const koreaMs = rawDate.getTime() + 9 * 60 * 60000;
-  const korea = new Date(koreaMs);
-  return {
-    year: korea.getUTCFullYear(),
-    month: korea.getUTCMonth() + 1,
-    monthIndex: korea.getUTCMonth(),
-    day: korea.getUTCDate(),
-    dayOfWeek: korea.getUTCDay(),
-    hours: korea.getUTCHours(),
-    minutes: korea.getUTCMinutes(),
-  };
-}
-
-function koreaDateKey_(date) {
-  const p = koreaDateParts_(date);
-  return `${p.year}-${String(p.month).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`;
-}
-
-function koreaDayOfWeek_(dateOrKey) {
-  const key = typeof dateOrKey === "string" ? dateOrKey : koreaDateKey_(dateOrKey);
-  const [year, month, day] = key.split("-").map(Number);
-  return new Date(Date.UTC(year, month - 1, day)).getUTCDay();
-}
-
-function koreaAddDays_(dateKey, n) {
-  const [year, month, day] = dateKey.split("-").map(Number);
-  const d = new Date(Date.UTC(year, month - 1, day));
-  d.setUTCDate(d.getUTCDate() + n);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-}
-
-function koreaTimeMinutes_(date) {
-  const p = koreaDateParts_(date);
-  return p.hours * 60 + p.minutes;
-}
-
-function getLocalUsMarketStatus_(now = new Date()) {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/New_York",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false
-  }).formatToParts(now);
-  const map = {};
-  parts.forEach(p => { if (p.type) map[p.type] = p.value; });
-
-  const year = Number(map.year);
-  const month = map.month;
-  const day = map.day;
-  const hour = Number(map.hour);
-  const minute = Number(map.minute);
-
-  const ymd = `${year}-${String(Number(month)).padStart(2, "0")}-${String(Number(day)).padStart(2, "0")}`;
-  const weekday = new Date(Date.UTC(year, Number(month) - 1, Number(day))).getUTCDay();
-  const openMinutes = 9 * 60 + 30;
-  const closeMinutes = 16 * 60;
-  const nowMinutes = hour * 60 + minute;
-  const isWeekend = weekday === 0 || weekday === 6;
-  const isRegularOpen = !isWeekend && nowMinutes >= openMinutes && nowMinutes < closeMinutes;
-
-  const pad = n => String(n).padStart(2, "0");
-
-  return {
-    market: "US",
-    timeZone: "America/New_York",
-    checkedAt: now.toISOString(),
-    marketDate: ymd,
-    marketTime: `${pad(hour)}:${pad(minute)}:00`,
-    isRegularOpen,
-    isWeekend
-  };
-}
-
-function usPreviousWeekday_(ymd) {
-  const [year, month, day] = ymd.split("-").map(Number);
-  const d = new Date(Date.UTC(year, month - 1, day));
-  do {
-    d.setUTCDate(d.getUTCDate() - 1);
-    var wd = d.getUTCDay();
-  } while (wd === 0 || wd === 6);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
-
-function getKoreaNow_() {
-  return new Date();
-}
-
-function koreaTodayKey_() {
-  return koreaDateKey_(getKoreaNow_());
-}
 
 function yesterdayKey_() {
   return dateKey(addDays(startOfDay(new Date()), -1));
@@ -3146,7 +2892,7 @@ function trendPointSummary_(point) {
 }
 
 function trendPeriodFor(account) {
-  return state.trendPeriodByAccount?.[account] || state.trendPeriod || "max";
+  return state.trendPeriodByAccount?.[account] || state.trendPeriod || "month";
 }
 
 function setTrendPeriodFor(account, period) {
@@ -3408,10 +3154,9 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
       <path class="trend-asset-area" d="${assetArea}" fill="url(#${id}-asset)" />
       <path class="trend-principal-line" d="${principalLine}" />
       <path class="trend-asset-line" d="${assetLine}" />
-      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><line class="trend-touch-line" x1="${plotLeft}" y1="${selectedPoint.assetY}" x2="${plotRight}" y2="${selectedPoint.assetY}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
+      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
     </svg>
     ${renderTrendYLabels_(formatTrendAxisWon_(max), "0원", yLabelX, padTop, plotBottom, width, height)}
-    ${selectedPoint ? renderTrendSelectedAssetLabel_(selectedPoint.totalAsset, yLabelX, selectedPoint.assetY, width, height) : ""}
     <div class="trend-x-labels">
       ${tickItems.map(t => `<span style="left:${(t.x / width) * 100}%">${escapeHtml(t.label)}</span>`).join("")}
     </div>
@@ -3465,20 +3210,6 @@ function renderTrendYLabels_(topText, bottomText, x, topY, bottomY, width, heigh
     <div class="trend-y-labels" aria-hidden="true">
       <span class="trend-y-label-html top" style="left:${leftPct}%;top:${topPct}%">${renderTrendYLabelText_(topText)}</span>
       <span class="trend-y-label-html bottom" style="left:${leftPct}%;top:${bottomPct}%">${renderTrendYLabelText_(bottomText)}</span>
-    </div>
-  `;
-}
-
-function renderTrendSelectedAssetLabel_(value, x, y, width, height) {
-  const leftPct = (x / width) * 100;
-  const topPct = (y / height) * 100;
-  const amount = (Number(value || 0) / 100_000_000).toFixed(2) + "억";
-
-  return `
-    <div class="trend-y-labels" aria-hidden="true">
-      <div class="trend-selected-asset-label" style="left:${leftPct}%;top:${topPct}%">
-        ${renderTrendYLabelText_(amount)}
-      </div>
     </div>
   `;
 }
@@ -3721,9 +3452,6 @@ function trendTickPercent(date, range) {
 }
 
 function parseDateKey(date) {
-  if (date instanceof Date) return startOfDay(date);
-  if (typeof date === "number") return startOfDay(new Date(date));
-
   const s = String(date || "").slice(0, 10);
   const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
   if (!m) return startOfDay(new Date());
