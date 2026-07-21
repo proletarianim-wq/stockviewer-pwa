@@ -2085,7 +2085,7 @@ function renderLiveAssetRow(i) {
           <span class="${dayClass}">${formatWonSign(dayProfitKrw)}</span>
         </div>
         <div class="asset-profit ${profitClass}">
-          ${formatWonSign(i.profit)} (${formatRate(i.profitRate)})
+          ${formatWonSign(i.profit)} (${formatPlainRate(Math.abs(i.profitRate))})
         </div>
       </div>
     </div>
