@@ -2203,7 +2203,6 @@ function renderAccountWeightLine(i) {
   return `
     <div class="account-weight-line">
       <span class="color-dot" style="--dot-color:${i.color};"></span>
-      <span class="account-weight-no">${escapeHtml(account.no)}</span>
       <span class="account-weight-name">${escapeHtml(account.name)}</span>
       <span class="account-weight-value">${formatWon(i.valueKrw)}</span>
       <span class="account-weight-rate">${formatPlainRate(i.weight)}</span>
