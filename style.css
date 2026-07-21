@@ -356,7 +356,7 @@
   --cash-summary-columns: minmax(0, 1fr) minmax(235px, 2fr);
 
   /* 비중 */
-  --account-weight-columns: 10px 8px minmax(0, 1fr) 74px 42px 70px;
+  --account-weight-columns: 10px minmax(0, 1fr) 74px 42px 70px;
   --weight-detail-columns: 10px minmax(0, 1fr) 74px 42px 70px;
   --weight-item-columns: 10px minmax(0, 1fr) 65px;
   --donut-layout-columns: 140px minmax(0, 1fr);
