@@ -537,7 +537,9 @@ async function fetchQuotesFromWorker_(base, scope = "all", addProgress = null) {
   const useDomesticDailyClose = koreaTimeMinutes_(now) < 9 * 60 || !isKoreaTradingDay_(koreaToday);
   const domesticDailyCloseBasisDate = getKoreaBasisDate_(now).replace(/-/g, "");
   const domesticDailyCloseTargets = useDomesticDailyClose
-    ? allTargets.filter(isDomesticStockTargetClient_)
+    ? allTargets.filter(target =>
+      isDomesticStockTargetClient_(target) || isDomesticIndexTargetClient_(target)
+    )
     : [];
   const hasOverseasStocks = allTargets.some(isOverseasStockTargetClient_);
   const marketStatus = hasOverseasStocks
@@ -600,7 +602,7 @@ async function fetchQuotesFromWorker_(base, scope = "all", addProgress = null) {
   let domesticCloseData = null;
   if (domesticDailyCloseTargets.length) {
     addProgress?.(
-      `국내 개장 전 또는 휴장일입니다. 국내 종목 ${domesticDailyCloseTargets.length}개의 마지막 거래장 전장대비를 확인합니다.`
+      `국내 개장 전 또는 휴장일입니다. 국내 종목·지수 ${domesticDailyCloseTargets.length}개의 마지막 거래장 전장대비를 확인합니다.`
     );
 
     try {
@@ -832,6 +834,14 @@ function isDomesticStockTargetClient_(target) {
   if (exchange === "IDX_KR" || assetType.includes("국내지수")) return false;
   if (exchange === "KRX") return true;
   return assetType.startsWith("국내");
+}
+
+function isDomesticIndexTargetClient_(target) {
+  if (!target) return false;
+
+  const exchange = String(target.exchange || "").trim().toUpperCase();
+  const assetType = String(target.assetType || "").trim();
+  return exchange === "IDX_KR" || assetType.includes("국내지수");
 }
 
 function isOverseasStockTargetClient_(target) {
