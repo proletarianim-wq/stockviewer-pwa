@@ -27,7 +27,7 @@ async function loadConfig() {
   });
 
   if (!res.ok) {
-    throw new Error("config.json을 불러오지 못했습니다.");
+    throw new Error("config.json을 불러오지 못했습니다. by 임흥재200");
   }
 
   const externalConfig = await res.json();
@@ -51,6 +51,8 @@ const NAV_ICONS = {
 
 const state = {
   activeTab: "watchlist",
+  tabScrollPositions: {},
+  tabNavigationId: 0,
   trendPeriod: "max",
   trendPeriodByAccount: {},
   trendSelectedDateByAccount: {},
@@ -1048,7 +1050,14 @@ function setupNav() {
 
   document.querySelectorAll(".nav-item[data-tab]").forEach(btn => {
     btn.addEventListener("click", async () => {
-      state.activeTab = btn.dataset.tab;
+      const currentTab = state.activeTab;
+      const nextTab = btn.dataset.tab;
+      const screen = document.getElementById("screen");
+      state.tabScrollPositions[currentTab] = currentTab === "chart"
+        ? (screen?.scrollTop || 0)
+        : window.scrollY;
+      state.activeTab = nextTab;
+      const navigationId = ++state.tabNavigationId;
 
       if ((state.activeTab === "chart" || state.activeTab === "timeline") && !state.snapshotsLoaded) {
         await loadSnapshotsIfNeeded();
@@ -1059,6 +1068,17 @@ function setupNav() {
       }
 
       render();
+      const targetScrollY = state.tabScrollPositions[nextTab] || 0;
+      requestAnimationFrame(() => {
+        if (navigationId !== state.tabNavigationId || state.activeTab !== nextTab) return;
+        if (nextTab === "chart") {
+          window.scrollTo(0, 0);
+          screen.scrollTop = targetScrollY;
+        } else {
+          screen.scrollTop = 0;
+          window.scrollTo(0, targetScrollY);
+        }
+      });
     });
   });
 
@@ -1531,6 +1551,7 @@ function render() {
 
   const screen = document.getElementById("screen");
   screen.classList.toggle("timeline-screen", state.activeTab === "timeline");
+  screen.classList.toggle("chart-screen", state.activeTab === "chart");
   if (state.activeTab === "quote") screen.innerHTML = renderTopCard() + renderQuoteTab();
   if (state.activeTab === "asset") screen.innerHTML = renderAssetTab();
   if (state.activeTab === "weight") screen.innerHTML = renderWeightTab();
@@ -2058,8 +2079,8 @@ function renderAssetAccountDetails(account) {
 /*
   현재 자산탭 종목행: 3열 × 3행
   1열: 종목명
-  2열: 현재가 / 전장 등락 / 평균가·수량
-  3열: 자산금액 / 전장대비 손익 / 평가손익
+  2열: 현재가 / 전장대비 / 평균가·수량
+  3열: 평가액 / 전장대비 손익 / 투자손익
 */
 function renderLiveAssetRow(i) {
   const profitClass = Number(i.profit || 0) >= 0 ? "profit" : "loss";
@@ -2074,9 +2095,13 @@ function renderLiveAssetRow(i) {
       <div class="asset-live-name stock-name">${escapeHtml(displayName(i))}</div>
 
       <div class="asset-live-market">
-        <div class="asset-live-price current-price">${formatPrice(i.currentPrice, i.currency)}</div>
+        <div class="asset-live-price current-price">
+          <span class="asset-live-label">현재가</span>
+          <span>${formatPrice(i.currentPrice, i.currency)}</span>
+        </div>
         <div class="asset-live-change day-change ${dayClass}">
-          ${formatChange(i.dayChangeAmount, i.currency)} (${formatPlainRate2(Math.abs(i.dayChangeRate))})
+          <span class="asset-live-label">전장대비</span>
+          <span>${formatChange(i.dayChangeAmount, i.currency)} (${formatPlainRate2(Math.abs(i.dayChangeRate))})</span>
         </div>
         <div class="asset-live-meta">
            <span class="asset-live-label">평단</span>
@@ -2089,13 +2114,17 @@ function renderLiveAssetRow(i) {
       </div>
 
       <div class="asset-live-value">
-        <div class="asset-amount">${formatWon(i.valueKrw)}</div>
+        <div class="asset-live-amount">
+          <span class="asset-live-label">평가액</span>
+          <span class="asset-amount">${formatWon(i.valueKrw)}</span>
+        </div>
         <div class="asset-live-today">
           <span class="asset-live-label">전장대비</span>
           <span class="${dayClass}">${formatWonSign(dayProfitKrw)}</span>
         </div>
-        <div class="asset-profit ${profitClass}">
-          ${formatWonSign(i.profit)} (${formatPlainRate(Math.abs(i.profitRate))})
+        <div class="asset-live-investment">
+          <span class="asset-live-label">손익</span>
+          <span class="asset-profit ${profitClass}">${formatWonSign(i.profit)} (${formatPlainRate(Math.abs(i.profitRate))})</span>
         </div>
       </div>
     </div>
@@ -3244,6 +3273,7 @@ function trendDaySerial_(date) {
 function renderTrendGraphPanel(account, model = trendChartModel_(account)) {
   const sliderSpan = Math.max(0, model.sliderMax - model.sliderMin);
   const progress = sliderSpan ? ((model.sliderValue - model.sliderMin) / sliderSpan) * 100 : 100;
+  const symbolData = trendSymbolSeriesFor_(account, model.sampled);
 
   return `
     <div class="trend-panel" data-trend-account="${escapeHtml(account)}">
@@ -3253,26 +3283,39 @@ function renderTrendGraphPanel(account, model = trendChartModel_(account)) {
         <span class="trend-selected-date">${model.selected?.date ? formatTrendDateLabel(model.selected) : ""}</span>
       </div>
       <div class="chart-wrap trend-chart-wrap" data-trend-account="${escapeHtml(account)}">
-        ${renderAssetTrendChart(model.sampled, model.selected, model.range, model.period)}
+        ${renderAssetTrendChart(model.sampled, model.selected, model.range, model.period, symbolData)}
       </div>
-      <div class="trend-slider-wrap" style="--trend-slider-left:${model.sliderLeftPct}%;--trend-slider-right:${model.sliderRightPct}%">
-        <input
-          class="trend-date-slider"
-          data-trend-slider
-          data-trend-account="${escapeHtml(account)}"
-          type="range"
-          min="${model.sliderMin}"
-          max="${model.sliderMax}"
-          step="1"
-          value="${model.sliderValue}"
-          style="--trend-slider-progress:${progress}%"
-          aria-label="${escapeHtml(account)} 날짜 선택"
-        />
+      <div class="trend-weight-list" data-trend-weight-list>
+        ${renderTrendWeightList_(account, model.selected?.date, symbolData.colorMap)}
       </div>
-      <div class="trend-periods">
-        ${TREND_PERIODS.map(p => `<button class="trend-period-btn ${p.key === model.period ? "active" : ""}" data-trend-account="${escapeHtml(account)}" data-trend-period="${p.key}" type="button">${p.label}</button>`).join("")}
+      <div class="trend-controls">
+        <div class="trend-slider-wrap" style="--trend-slider-left:${model.sliderLeftPct}%;--trend-slider-right:${model.sliderRightPct}%">
+          <input
+            class="trend-date-slider"
+            data-trend-slider
+            data-trend-account="${escapeHtml(account)}"
+            type="range"
+            min="${model.sliderMin}"
+            max="${model.sliderMax}"
+            step="1"
+            value="${model.sliderValue}"
+            style="--trend-slider-progress:${progress}%"
+            aria-label="${escapeHtml(account)} 날짜 선택"
+          />
+        </div>
+        <div class="trend-periods">
+          ${TREND_PERIODS.map(p => `<button class="trend-period-btn ${p.key === model.period ? "active" : ""}" data-trend-account="${escapeHtml(account)}" data-trend-period="${p.key}" type="button">${p.label}</button>`).join("")}
+        </div>
       </div>
     </div>
+  `;
+}
+function renderTrendWeightList_(account, date, symbolColors = trendSymbolHistory_().colors) {
+  const items = trendSymbolItemsForDate_(account, date)
+    .filter(item => Number(item.valueKrw || 0) > 0);
+
+  return `
+    ${renderWeightBarLayout(groupSmall(items), symbolColors)}
   `;
 }
 function attachTrendEvents() {
@@ -3379,15 +3422,21 @@ function updateTrendSliderSelection_(slider) {
   if (dateEl) dateEl.textContent = formatTrendDateLabel(selected);
 
   const chartEl = card.querySelector(".trend-chart-wrap");
+  const symbolData = trendSymbolSeriesFor_(account, model.sampled);
   if (chartEl) {
-    chartEl.innerHTML = renderAssetTrendChart(model.sampled, selected, model.range, model.period);
+    chartEl.innerHTML = renderAssetTrendChart(model.sampled, selected, model.range, model.period, symbolData);
+  }
+
+  const weightListEl = card.querySelector("[data-trend-weight-list]");
+  if (weightListEl) {
+    weightListEl.innerHTML = renderTrendWeightList_(account, selected.date, symbolData.colorMap);
   }
 
   const sliderSpan = Math.max(0, model.sliderMax - model.sliderMin);
   const progress = sliderSpan ? ((selectedSerial - model.sliderMin) / sliderSpan) * 100 : 100;
   slider.style.setProperty("--trend-slider-progress", progress + "%");
 }
-function renderAssetTrendChart(points, selected, range, period = state.trendPeriod) {
+function renderAssetTrendChart(points, selected, range, period = state.trendPeriod, symbolData = { series: [] }) {
   const plot = trendPlotGeometry_();
   const width = plot.width;
   const height = plot.height;
@@ -3399,7 +3448,6 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
   const plotHeight = plotBottom - padTop;
   const yLabelX = plotRight + readTrendCssNumber_("--trend-y-label-gap", 9);
   const touchDotRadius = readTrendCssNumber_("--trend-touch-dot-radius", 5);
-  const id = "tg" + Math.floor(Math.random() * 1000000);
   const ticks = trendTicks(period, range, points);
   const gridY = trendGridYRatios_().map(r => padTop + plotHeight * r);
   const xFor = date => plotLeft + trendDateRatio_(date, range) * plotWidth;
@@ -3421,9 +3469,13 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
     `;
   }
 
+  const stackTotals = points.map((_, pointIndex) =>
+    symbolData.series.reduce((total, series) => total + Number(series.values[pointIndex] || 0), 0)
+  );
   const maxValue = Math.max(
     ...points.map(p => Number(p.totalAsset || 0)),
     ...points.map(p => Number(p.principal || 0)),
+    ...stackTotals,
     1
   );
   const max = niceTrendMax(maxValue * 1.1);   /*가장 큰 값이 세로축의 상단 90%쯤에 표시되도록 1.1을 곱함 */
@@ -3439,32 +3491,34 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
 
   const assetLine = makeSvgLinePath(xy, "assetY");
   const principalLine = makeSvgLinePath(xy, "principalY");
-  const assetArea = makeSvgAreaPath(xy, "assetY", plotBottom);
-  const principalArea = makeSvgAreaPath(xy, "principalY", plotBottom);
+  const stackedValues = points.map(() => 0);
+  const symbolAreas = symbolData.series.map(series => {
+    const lower = [];
+    const upper = [];
+
+    points.forEach((point, index) => {
+      const x = Math.max(plotLeft, Math.min(plotRight, xFor(point.date)));
+      const bottomValue = stackedValues[index];
+      const topValue = bottomValue + Math.max(0, Number(series.values[index] || 0));
+      lower.push({ x, y: yFor(bottomValue) });
+      upper.push({ x, y: yFor(topValue) });
+      stackedValues[index] = topValue;
+    });
+
+    return { color: series.color, path: makeSvgBandPath_(upper, lower) };
+  });
   const selectedPoint = selected ? xy.find(p => p.date === selected.date) : xy[xy.length - 1];
 
   return `
     <svg class="chart-svg" viewBox="0 0 ${width} ${height}">
-      <defs>
-        <linearGradient id="${id}-asset" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--trend-asset-color)" stop-opacity="var(--trend-asset-area-opacity, 0.24)" />
-          <stop offset="100%" stop-color="var(--trend-asset-color)" stop-opacity="0" />
-        </linearGradient>
-        <linearGradient id="${id}-principal" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="var(--trend-principal-color)" stop-opacity="var(--trend-principal-area-opacity, 0.16)" />
-          <stop offset="100%" stop-color="var(--trend-principal-color)" stop-opacity="0" />
-        </linearGradient>
-      </defs>
-
       ${gridY.map(y => `<line class="trend-grid-line trend-grid-h" x1="${plotLeft}" y1="${y}" x2="${plotRight}" y2="${y}" />`).join("")}
       ${tickItems.map(t => `<line class="trend-grid-line trend-grid-v" x1="${t.x}" y1="${padTop}" x2="${t.x}" y2="${plotBottom}" />`).join("")}
       <rect class="trend-plot-border" x="${plotLeft}" y="${padTop}" width="${plotWidth}" height="${plotHeight}" />
       <!-- Y축 금액 라벨은 SVG 왜곡을 피하기 위해 HTML로 표시합니다. -->
 
-      <path class="trend-principal-area" d="${principalArea}" fill="url(#${id}-principal)" />
-      <path class="trend-asset-area" d="${assetArea}" fill="url(#${id}-asset)" />
-      <path class="trend-principal-line" d="${principalLine}" />
+      ${symbolAreas.map(area => `<path class="trend-symbol-area" d="${area.path}" fill="${area.color}" stroke="${area.color}" />`).join("")}
       <path class="trend-asset-line" d="${assetLine}" />
+      <path class="trend-principal-line" d="${principalLine}" />
       ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><line class="trend-touch-line" x1="${plotLeft}" y1="${selectedPoint.assetY}" x2="${plotRight}" y2="${selectedPoint.assetY}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
     </svg>
     ${renderTrendYLabels_(formatTrendAxisWon_(max), "0원", yLabelX, padTop, plotBottom, width, height)}
@@ -3564,14 +3618,6 @@ function makeSvgLinePath(points, yKey) {
   return points.map((p, i) => `${i ? "L" : "M"} ${p.x.toFixed(2)} ${Number(p[yKey]).toFixed(2)}`).join(" ");
 }
 
-function makeSvgAreaPath(points, yKey, bottomY) {
-  if (!points.length) return "";
-  const line = makeSvgLinePath(points, yKey);
-  const first = points[0];
-  const last = points[points.length - 1];
-  return `${line} L ${last.x.toFixed(2)} ${bottomY} L ${first.x.toFixed(2)} ${bottomY} Z`;
-}
-
 function trendSnapshotPointsFor(account) {
   const raw = state.data?.snapshots || [];
   const normalized = raw.map(normalizeTrendSnapshot).filter(Boolean);
@@ -3582,6 +3628,96 @@ function trendSnapshotPointsFor(account) {
       return p.scope === "ACCOUNT" && trendAccountMatches_(p, account);
     })
     .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function trendSymbolHistory_() {
+  const snapshots = state.data?.snapshots || [];
+  const cached = state.trendSymbolHistoryCache;
+  if (cached?.data === state.data && cached.snapshots === snapshots) return cached;
+
+  const byDate = new Map();
+  const symbols = new Set();
+  snapshots.forEach(row => {
+    const item = normalizeSnapshotDetailFromCache_(row);
+    if (item?.scope !== "SYMBOL") return;
+
+    symbols.add(item.symbol);
+    if (!byDate.has(item.date)) byDate.set(item.date, []);
+    byDate.get(item.date).push(item);
+  });
+
+  holdings().forEach(item => symbols.add(String(item.symbol || "")));
+
+  const currentItems = aggregateBySymbol(holdings())
+    .filter(item => !isCash(item.symbol))
+    .filter(item => Number(item.valueKrw || 0) > 0)
+    .sort((a, b) => Number(b.valueKrw || 0) - Number(a.valueKrw || 0));
+  const colors = buildSymbolColorMap();
+  const symbolOrder = currentItems.map(item => String(item.symbol));
+  let colorIndex = symbolOrder.length;
+  Array.from(symbols)
+    .filter(symbol => symbol && !isCash(symbol) && !colors[symbol])
+    .sort((a, b) => a.localeCompare(b))
+    .forEach(symbol => {
+      colors[symbol] = symbolChartColor(colorIndex++);
+      symbolOrder.push(symbol);
+    });
+
+  const history = { data: state.data, snapshots, byDate, colors, symbolOrder };
+  state.trendSymbolHistoryCache = history;
+  return history;
+}
+
+function trendSymbolItemsForDate_(account, date) {
+  const history = trendSymbolHistory_();
+  const items = date === koreaTodayKey_()
+    ? holdings()
+    : (history.byDate.get(date) || []);
+  const accountItems = account === "전체계좌"
+    ? aggregateBySymbol(items)
+    : items.filter(item => trendAccountMatches_(item, account));
+
+  return combineCashForWeight(accountItems);
+}
+
+function trendSymbolSeriesFor_(account, points) {
+  const history = trendSymbolHistory_();
+  const valuesByDate = new Map();
+  const presentSymbols = new Set();
+
+  points.forEach(point => {
+    const values = new Map();
+    trendSymbolItemsForDate_(account, point.date).forEach(item => {
+      const symbol = String(item.symbol || "");
+      const value = Number(item.valueKrw || 0);
+      values.set(symbol, (values.get(symbol) || 0) + value);
+      if (value > 0) presentSymbols.add(symbol);
+    });
+    valuesByDate.set(point.date, values);
+  });
+
+  const orderedSymbols = [
+    ...Array.from(presentSymbols).filter(isCash),
+    ...history.symbolOrder.filter(symbol => presentSymbols.has(symbol)).reverse()
+  ];
+
+  return {
+    colorMap: history.colors,
+    series: orderedSymbols.map((symbol, index) => ({
+      symbol,
+      color: symbolColor({ symbol }, history.colors, index),
+      values: points.map(point => valuesByDate.get(point.date)?.get(symbol) || 0)
+    }))
+  };
+}
+
+function makeSvgBandPath_(upper, lower) {
+  if (!upper.length || !lower.length) return "";
+  const upperPath = makeSvgLinePath(upper, "y");
+  const lowerPath = lower.slice().reverse()
+    .map(point => `L ${point.x.toFixed(2)} ${Number(point.y).toFixed(2)}`)
+    .join(" ");
+  return `${upperPath} ${lowerPath} Z`;
 }
 
 function trendAccountMatches_(snapshotPoint, account) {

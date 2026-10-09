@@ -376,8 +376,6 @@
   --trend-y-label-gap: 9;
   --trend-y-label-unit-gap: 2px;
   --trend-touch-dot-radius: 5;
-  --trend-asset-area-opacity: 0.24;
-  --trend-principal-area-opacity: 0.16;
   --trend-chart-margin-top: 8px;
   --trend-x-label-height: 20px;
 
@@ -440,6 +438,31 @@ button {
 
 .screen.timeline-screen {
   padding-bottom: calc(var(--bottom-nav-height) + 72px + env(safe-area-inset-bottom));
+}
+
+.screen.chart-screen {
+  height: calc(100vh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
+  height: calc(100dvh - var(--bottom-nav-height) - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scroll-snap-type: y mandatory;
+  padding-bottom: 0;
+}
+
+.chart-screen > .chart-account-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  margin: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+.chart-screen .account-content-card-body,
+.chart-screen .portfolio-summary-extra {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
 }
 
 .loading-screen {
@@ -886,10 +909,27 @@ button {
   white-space: nowrap;
 }
 
+.asset-live-price,
 .asset-live-change,
+.asset-live-amount,
+.asset-live-investment {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 0;
+  white-space: nowrap;
+}
+
+.asset-live-change,
+.asset-live-investment,
 .asset-live-value .asset-profit {
   margin-top: 3px;
   white-space: nowrap;
+}
+
+.asset-live-amount .asset-amount,
+.asset-live-investment .asset-profit {
+  margin-top: 0;
 }
 
 .asset-live-today,
@@ -1134,7 +1174,16 @@ button {
 }
 
 .trend-panel {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
   padding: 10px 0 4px;
+}
+
+.trend-weight-list {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-line);
 }
 
 .trend-slider-wrap {
@@ -1144,6 +1193,17 @@ button {
     var(--trend-slider-right, 9.5%)
     2px
     var(--trend-slider-left, 2.5%);
+}
+
+.chart-screen .trend-controls {
+  position: sticky;
+  bottom: 0;
+  z-index: 3;
+  flex: 0 0 auto;
+  margin-top: auto;
+  padding: 8px 0 2px;
+  border-top: 1px solid var(--color-line);
+  background: var(--color-card-bg);
 }
 
 .trend-slider-wrap::before {
@@ -1389,8 +1449,10 @@ button {
   stroke-linejoin: round;
 }
 
-.trend-asset-area,
-.trend-principal-area {
+.trend-symbol-area {
+  fill-opacity: 1;
+  stroke-width: 0.8;
+  stroke-opacity: 1;
   pointer-events: none;
 }
 
