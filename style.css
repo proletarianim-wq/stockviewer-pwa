@@ -612,7 +612,8 @@ button {
 
 .portfolio-price-basis {
   margin-top: 7px;
-  font-size: 11px;
+  font-size: 10px;
+  letter-spacing: -0.5px;
   line-height: 1.1;
   color: var(--color-ui-muted);
   font-weight: 400;
