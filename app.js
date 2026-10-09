@@ -3278,9 +3278,11 @@ function renderTrendGraphPanel(account, model = trendChartModel_(account)) {
   return `
     <div class="trend-panel" data-trend-account="${escapeHtml(account)}">
       <div class="trend-legend">
-        <span class="trend-legend-item asset"><i></i>자산</span>
-        <span class="trend-legend-item principal"><i></i>원금</span>
         <span class="trend-selected-date">${model.selected?.date ? formatTrendDateLabel(model.selected) : ""}</span>
+        <div class="trend-legend-values">
+          <span class="trend-legend-item principal" data-trend-principal>원금 ${formatTrendAxisWon_(model.selected?.basis ?? model.selected?.principal ?? model.selected?.principalKrw ?? 0)}</span>
+          <span class="trend-legend-item asset" data-trend-asset>자산 ${formatTrendAxisWon_(model.selected?.totalAsset ?? 0)}</span>
+        </div>
       </div>
       <div class="chart-wrap trend-chart-wrap" data-trend-account="${escapeHtml(account)}">
         ${renderAssetTrendChart(model.sampled, model.selected, model.range, model.period, symbolData)}
@@ -3421,6 +3423,13 @@ function updateTrendSliderSelection_(slider) {
   const dateEl = card.querySelector(".trend-selected-date");
   if (dateEl) dateEl.textContent = formatTrendDateLabel(selected);
 
+  const principalEl = card.querySelector("[data-trend-principal]");
+  if (principalEl) {
+    principalEl.textContent = `원금 ${formatTrendAxisWon_(selected.basis ?? selected.principal ?? selected.principalKrw ?? 0)}`;
+  }
+  const assetEl = card.querySelector("[data-trend-asset]");
+  if (assetEl) assetEl.textContent = `자산 ${formatTrendAxisWon_(selected.totalAsset)}`;
+
   const chartEl = card.querySelector(".trend-chart-wrap");
   const symbolData = trendSymbolSeriesFor_(account, model.sampled);
   if (chartEl) {
@@ -3446,7 +3455,6 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
   const plotBottom = plot.bottom;
   const plotWidth = plotRight - plotLeft;
   const plotHeight = plotBottom - padTop;
-  const yLabelX = plotRight + readTrendCssNumber_("--trend-y-label-gap", 9);
   const touchDotRadius = readTrendCssNumber_("--trend-touch-dot-radius", 5);
   const ticks = trendTicks(period, range, points);
   const gridY = trendGridYRatios_().map(r => padTop + plotHeight * r);
@@ -3459,9 +3467,7 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
         ${gridY.map(y => `<line class="trend-grid-line trend-grid-h" x1="${plotLeft}" y1="${y}" x2="${plotRight}" y2="${y}" />`).join("")}
         ${tickItems.map(t => `<line class="trend-grid-line trend-grid-v" x1="${t.x}" y1="${padTop}" x2="${t.x}" y2="${plotBottom}" />`).join("")}
         <rect class="trend-plot-border" x="${plotLeft}" y="${padTop}" width="${plotWidth}" height="${plotHeight}" />
-        <!-- Y축 금액 라벨은 SVG 왜곡을 피하기 위해 HTML로 표시합니다. -->
       </svg>
-      ${renderTrendYLabels_("-", "0원", yLabelX, padTop, plotBottom, width, height)}
       <div class="trend-x-labels">
         ${tickItems.map(t => `<span style="left:${(t.x / width) * 100}%">${escapeHtml(t.label)}</span>`).join("")}
       </div>
@@ -3514,15 +3520,12 @@ function renderAssetTrendChart(points, selected, range, period = state.trendPeri
       ${gridY.map(y => `<line class="trend-grid-line trend-grid-h" x1="${plotLeft}" y1="${y}" x2="${plotRight}" y2="${y}" />`).join("")}
       ${tickItems.map(t => `<line class="trend-grid-line trend-grid-v" x1="${t.x}" y1="${padTop}" x2="${t.x}" y2="${plotBottom}" />`).join("")}
       <rect class="trend-plot-border" x="${plotLeft}" y="${padTop}" width="${plotWidth}" height="${plotHeight}" />
-      <!-- Y축 금액 라벨은 SVG 왜곡을 피하기 위해 HTML로 표시합니다. -->
 
       ${symbolAreas.map(area => `<path class="trend-symbol-area" d="${area.path}" fill="${area.color}" stroke="${area.color}" />`).join("")}
       <path class="trend-asset-line" d="${assetLine}" />
       <path class="trend-principal-line" d="${principalLine}" />
-      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><line class="trend-touch-line" x1="${plotLeft}" y1="${selectedPoint.assetY}" x2="${plotRight}" y2="${selectedPoint.assetY}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
+      ${selectedPoint ? `<line class="trend-touch-line" x1="${selectedPoint.x}" y1="${padTop}" x2="${selectedPoint.x}" y2="${plotBottom}" /><line class="trend-touch-line" x1="${plotLeft}" y1="${selectedPoint.assetY}" x2="${plotRight}" y2="${selectedPoint.assetY}" /><circle class="trend-principal-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.principalY}" r="${touchDotRadius}" /><circle class="trend-touch-dot" cx="${selectedPoint.x}" cy="${selectedPoint.assetY}" r="${touchDotRadius}" />` : ""}
     </svg>
-    ${renderTrendYLabels_(formatTrendAxisWon_(max), "0원", yLabelX, padTop, plotBottom, width, height)}
-    ${selectedPoint ? renderTrendSelectedAssetLabel_(selectedPoint.totalAsset, yLabelX, selectedPoint.assetY, width, height) : ""}
     <div class="trend-x-labels">
       ${tickItems.map(t => `<span style="left:${(t.x / width) * 100}%">${escapeHtml(t.label)}</span>`).join("")}
     </div>
@@ -3565,41 +3568,6 @@ function readTrendCssNumber_(name, fallback) {
 
   const value = Number.parseFloat(raw);
   return Number.isFinite(value) ? value : fallback;
-}
-
-function renderTrendYLabels_(topText, bottomText, x, topY, bottomY, width, height) {
-  const leftPct = (x / width) * 100;
-  const topPct = (topY / height) * 100;
-  const bottomPct = (bottomY / height) * 100;
-
-  return `
-    <div class="trend-y-labels" aria-hidden="true">
-      <span class="trend-y-label-html top" style="left:${leftPct}%;top:${topPct}%">${renderTrendYLabelText_(topText)}</span>
-      <span class="trend-y-label-html bottom" style="left:${leftPct}%;top:${bottomPct}%">${renderTrendYLabelText_(bottomText)}</span>
-    </div>
-  `;
-}
-
-function renderTrendSelectedAssetLabel_(value, x, y, width, height) {
-  const leftPct = (x / width) * 100;
-  const topPct = (y / height) * 100;
-  const amount = (Number(value || 0) / 100_000_000).toFixed(2) + "억";
-
-  return `
-    <div class="trend-y-labels" aria-hidden="true">
-      <div class="trend-selected-asset-label" style="left:${leftPct}%;top:${topPct}%">
-        ${renderTrendYLabelText_(amount)}
-      </div>
-    </div>
-  `;
-}
-
-function renderTrendYLabelText_(text) {
-  const value = String(text || "");
-  const match = value.match(/^(.*?)(억|만원|원)$/);
-  if (!match) return `<span>${escapeHtml(value)}</span>`;
-
-  return `<span>${escapeHtml(match[1])}</span><span>${escapeHtml(match[2])}</span>`;
 }
 
 function trendDomainMs_(range) {

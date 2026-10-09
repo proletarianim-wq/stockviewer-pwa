@@ -20,6 +20,9 @@
   --color-card-bg: rgb(19, 19, 27);
   --color-control-bg: #252A3A;
   --color-control-bg-dark: #1B1F2B;
+  --color-control-active-bg: #fff;
+  --color-control-active-text: #000;
+  --color-trend-slider-track: #30384A;
   --color-account-tab-bg: #2A3042;
 
   /* 텍스트 */
@@ -134,14 +137,14 @@
   /* FONT 01: 하단 네비게이션 - 일반 탭 */
   --font-01-family: var(--font-family-number);
   --font-01-size: 13px;
-  --font-01-weight: 700;
+  --font-01-weight: 400;
   --font-01-color: var(--color-ui-muted);
   --font-01-letter-spacing: 0px;
 
   /* FONT 02: 하단 네비게이션 - 선택 탭 */
   --font-02-family: var(--font-family-base);
   --font-02-size: 13px;
-  --font-02-weight: 900;
+  --font-02-weight: 700;
   --font-02-color: var(--color-data-main);
   --font-02-letter-spacing: 0px;
 
@@ -264,7 +267,7 @@
   /* FONT 52: 추이 - 가로축/범례 */
   --font-52-family: var(--font-family-base);
   --font-52-size: 10px;
-  --font-52-weight: 600;
+  --font-52-weight: 400;
   --font-52-color: var(--color-ui-muted);
   --font-52-letter-spacing: -0.4px;
 
@@ -365,18 +368,16 @@
 
   /* 추이 그래프 */
   --trend-chart-viewbox-width: 600;
-  --trend-chart-viewbox-height: 200;
+  --trend-chart-viewbox-height: 300;
   --trend-plot-left: 15;
-  --trend-plot-right: 543;
+  --trend-plot-right: 585;
   --trend-plot-top: 0;
-  --trend-plot-bottom: 195;
+  --trend-plot-bottom: 292.5;
   --trend-grid-y-1: 0.25;
   --trend-grid-y-2: 0.50;
   --trend-grid-y-3: 0.75;
-  --trend-y-label-gap: 9;
-  --trend-y-label-unit-gap: 2px;
-  --trend-touch-dot-radius: 5;
-  --trend-chart-margin-top: 8px;
+  --trend-touch-dot-radius: 6;
+  --trend-chart-margin-top: 0px;
   --trend-x-label-height: 20px;
 
   /* 추이 모드바 */
@@ -453,7 +454,7 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 100%;
-  margin: 0;
+  margin: 0 0 12px;
   scroll-snap-align: start;
   scroll-snap-stop: always;
 }
@@ -1202,19 +1203,18 @@ button {
   flex: 0 0 auto;
   margin-top: auto;
   padding: 8px 0 2px;
-  border-top: 1px solid var(--color-line);
   background: var(--color-card-bg);
 }
 
 .trend-slider-wrap::before {
   content: "";
   position: absolute;
-  top: 27px;
+  top: 26px;
   left: var(--trend-slider-left, 2.5%);
   right: var(--trend-slider-right, 9.5%);
-  height: 6px;
+  height: 8px;
   border-radius: 999px;
-  background: var(--color-control-bg);
+  background: var(--color-trend-slider-track);
   box-shadow: var(--shadow-inset-subtle);
 }
 
@@ -1280,7 +1280,7 @@ button {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
   gap: 0;
-  margin: 16px 0 2px;
+  margin: 11px 0 2px;
   padding: 4px;
   background: var(--color-control-bg-dark);
   border-radius: 999px;
@@ -1293,8 +1293,8 @@ button {
   border-radius: 999px;
   background: transparent;
   font-size: 13px;
-  font-weight: var(--font-51-weight);
-  color: var(--color-ui-muted);
+  font-weight: 400;
+  color: var(--color-data-main);
   letter-spacing: var(--font-51-letter-spacing);
   padding: 8px 0;
   line-height: 1;
@@ -1302,7 +1302,12 @@ button {
   white-space: nowrap;
 }
 
-.trend-period-btn.active,
+.trend-period-btn.active {
+  background: var(--color-control-active-bg);
+  color: var(--color-control-active-text);
+  box-shadow: var(--shadow-soft);
+}
+
 .trend-mode-btn.active {
   background: var(--color-control-bg);
   color: var(--color-data-main);
@@ -1314,44 +1319,38 @@ button {
 }
 
 .trend-legend {
-  position: relative;
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   min-height: 16px;
   margin: 10px 0 2px;
-  padding-left: 2.5%;
-  font-family: var(--font-52-family);
-  font-size: 11px;
-  font-weight: 700;
+  padding: 0 2.5%;
+  font-family: var(--font-42-family);
+  font-size: calc(var(--font-42-size) - 1px);
+  font-weight: var(--font-42-weight);
   color: var(--color-text-muted);
-  letter-spacing: -0.2px;
+  letter-spacing: var(--font-42-letter-spacing);
+}
+
+.trend-legend-values {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
 }
 
 .trend-legend-item {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-}
-
-.trend-legend-item i {
-  display: inline-block;
-  width: 10px;
-  height: 3px;
-  border-radius: 99px;
+  white-space: nowrap;
 }
 
 .trend-legend-item.asset { color: var(--trend-asset-color); }
-.trend-legend-item.asset i { background: var(--trend-asset-color); }
-.trend-legend-item.principal i { background: var(--trend-principal-color); }
+.trend-legend-item.principal { color: var(--color-data-main); }
 
 .trend-selected-date {
-  position: absolute;
-  left: 50%;
-  margin-left: 0;
-  transform: translateX(-50%);
-  color: var(--color-ui-muted);
+  color: var(--color-data-main);
   white-space: nowrap;
 }
 
@@ -1386,50 +1385,6 @@ button {
 .trend-grid-v,
 .trend-grid-h {
   opacity: 0.95;
-}
-
-.trend-y-label {
-  font-family: var(--font-53-family);
-  font-size: var(--font-53-size);
-  font-weight: var(--font-53-weight);
-  fill: var(--font-53-color);
-  letter-spacing: var(--font-53-letter-spacing);
-}
-
-.trend-y-labels {
-  position: absolute;
-  left: 0;
-  right: 2px;
-  top: 0;
-  bottom: var(--trend-x-label-height);
-  pointer-events: none;
-}
-
-.trend-y-label-html {
-  position: absolute;
-  display: inline-flex;
-  gap: var(--trend-y-label-unit-gap);
-  transform: translateY(-50%);
-  font-family: var(--font-53-family);
-  font-size: var(--font-53-size);
-  font-weight: var(--font-53-weight);
-  color: var(--font-53-color);
-  letter-spacing: var(--font-53-letter-spacing);
-  white-space: nowrap;
-}
-
-.trend-selected-asset-label {
-  position: absolute;
-  display: inline-flex;
-  gap: var(--trend-y-label-unit-gap);
-  transform: translateY(-50%);
-  font-family: var(--font-53-family);
-  font-size: var(--font-53-size);
-  font-weight: var(--font-53-weight);
-  color: var(--trend-asset-color);
-  letter-spacing: var(--font-53-letter-spacing);
-  white-space: nowrap;
-  pointer-events: none;
 }
 
 .trend-principal-line {
@@ -1467,6 +1422,12 @@ button {
   stroke-width: 2;
 }
 
+.trend-principal-touch-dot {
+  fill: var(--trend-principal-color);
+  stroke: var(--color-card-bg);
+  stroke-width: 2;
+}
+
 .trend-x-labels {
   position: absolute;
   left: 0;
@@ -1482,7 +1443,7 @@ button {
 
 .trend-x-labels span {
   position: absolute;
-  top: 5px;
+  top: 2px;
   transform: translateX(-50%);
   white-space: nowrap;
 }
