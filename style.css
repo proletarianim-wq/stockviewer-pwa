@@ -84,6 +84,21 @@
   --account-chart-10: #BE123C;
 
   /* 종목별 고정 차트 색상 */
+  --symbol-chart-01: rgb(183,20,63);
+  --symbol-chart-02: rgb(251,152,58);
+  --symbol-chart-03: rgb(74,105,188);
+  --symbol-chart-04: rgb(31,55,153);
+  --symbol-chart-05: rgb(8,153,146);
+  --symbol-chart-06: rgb(9,61,98);
+  --symbol-chart-07: rgb(229,142,37);
+  --symbol-chart-08: rgb(121,224,143);
+  --symbol-chart-09: rgb(150,30,94);
+  --symbol-chart-10: rgb(18,119,183);
+  --symbol-chart-11: rgb(0,106,57);
+  --symbol-chart-12: #8A143F;
+  --symbol-chart-etc: #9CA3AF;
+  --symbol-chart-cash: var(--color-cash);
+/*
   --symbol-chart-01: #2563EB;
   --symbol-chart-02: #DC2626;
   --symbol-chart-03: #0A3D62;
@@ -98,7 +113,7 @@
   --symbol-chart-12: #8A143F;
   --symbol-chart-etc: #9CA3AF;
   --symbol-chart-cash: var(--color-cash);
-
+*/
   /* 기존 chartColor 호환 */
   --chart-01: var(--symbol-chart-01);
   --chart-02: var(--symbol-chart-02);
