@@ -256,6 +256,7 @@ function normalizeBaseData_(data) {
 
   return {
     generatedAt: data.generatedAt || new Date().toISOString(),
+    snapshotFx: data.snapshotFx || null,
     positions,
     symbols,
     watchlists,
@@ -369,7 +370,7 @@ function buildHoldingsFromBase_(base, quoteData = {}) {
       const avgPrice = Number(p.avgPrice || 0);
 
       let fxRate = currency === "USD"
-        ? Number(quote.fxRate || usdKrw || p.fxRate || 0)
+        ? Number(usdKrw || quote.fxRate || p.fxRate || 0)
         : 1;
       if (!fxRate) fxRate = Number(p.fxRate || 1);
 
@@ -434,7 +435,7 @@ function buildWatchlistItemsFromBase_(base, quoteData = {}) {
     const currency = String(meta.currency || "KRW").toUpperCase();
 
     let fxRate = currency === "USD"
-      ? Number(quote.fxRate || usdKrw || meta.fxRate || 0)
+      ? Number(usdKrw || quote.fxRate || meta.fxRate || 0)
       : 1;
     if (!fxRate) fxRate = Number(meta.fxRate || 1);
 
@@ -453,7 +454,23 @@ function buildWatchlistItemsFromBase_(base, quoteData = {}) {
   }).filter(item => item.symbol);
 }
 
+function resolveQuoteFx_(base, quoteData) {
+  const valid = n => Number.isFinite(Number(n)) && Number(n) > 500 && Number(n) < 3000;
+  const succeeded = quoteData.fxLookupSucceeded === true ||
+    quoteData.debugTiming?.mock === true ||
+    ["overseas_multi_derived", "kis"].includes(quoteData.fxSource) ||
+    (!CONFIG.quoteApiUrl && quoteData.fxSource !== "fallback");
+  if (succeeded && valid(quoteData.usdKrw)) {
+    return { ...quoteData, fxSource: "kis", fxBasisDate: "" };
+  }
+  if (valid(base.snapshotFx?.rate)) {
+    return { ...quoteData, usdKrw: Number(base.snapshotFx.rate), fxSource: "snapshot", fxBasisDate: base.snapshotFx.date };
+  }
+  return { ...quoteData, usdKrw: valid(quoteData.usdKrw) ? Number(quoteData.usdKrw) : 1450, fxSource: "fallback", fxBasisDate: "" };
+}
+
 function buildDataFromBase_(base, snapshots = [], quoteData = {}) {
+  quoteData = resolveQuoteFx_(base, quoteData);
   const holdings = buildHoldingsFromBase_(base, quoteData);
   const watchlists = normalizeWatchlists_(base.watchlists || [], base.symbols || {});
   const quoteTargets = base.quoteTargets || collectQuoteTargetsFromBase_(base.positions || [], base.symbols || {}, watchlists);
@@ -462,6 +479,9 @@ function buildDataFromBase_(base, snapshots = [], quoteData = {}) {
   return {
     generatedAt: quoteData.generatedAt || base.generatedAt || new Date().toISOString(),
     usdKrw: Number(quoteData.usdKrw || base.usdKrw || 0),
+    snapshotFx: base.snapshotFx || null,
+    fxSource: quoteData.fxSource,
+    fxBasisDate: quoteData.fxBasisDate,
     positions: base.positions || [],
     symbols: base.symbols || {},
     watchlists,
@@ -595,8 +615,7 @@ async function fetchQuotesFromWorker_(base, scope = "all", addProgress = null) {
     addProgress?.(`미국 정규장 마감 시세 ${overseasDailyCloseTargets.length}개를 기간별시세로 조회합니다.`);
     closeData = await fetchOverseasDailyCloseFromWorker_(
       overseasDailyCloseTargets,
-      throttleMs,
-      knownUsdKrwForDailyCloseRequest_()
+      throttleMs
     );
     addProgress?.(`미국 정규장 마감 시세 ${Object.keys(closeData.quotes || {}).length}개를 받아왔습니다.`);
   }
@@ -703,13 +722,7 @@ async function fetchLiveQuotesFromWorker_(targets, scope = "all", throttleMs = 1
   return data;
 }
 
-function knownUsdKrwForDailyCloseRequest_() {
-  const fx = Number(state.data?.usdKrw || 0);
-  if (fx > 500 && fx < 3000 && Math.round(fx) !== 1450) return fx;
-  return 0;
-}
-
-async function fetchOverseasDailyCloseFromWorker_(targets, throttleMs = 120, usdKrw = 0) {
+async function fetchOverseasDailyCloseFromWorker_(targets, throttleMs = 120) {
   const endpoint = new URL("overseas-close-quotes", CONFIG.quoteApiUrl.endsWith("/") ? CONFIG.quoteApiUrl : CONFIG.quoteApiUrl + "/");
   if (CONFIG.token) endpoint.searchParams.set("token", CONFIG.token);
 
@@ -717,10 +730,6 @@ async function fetchOverseasDailyCloseFromWorker_(targets, throttleMs = 120, usd
     throttleMs,
     targets
   };
-
-  if (usdKrw && usdKrw > 500 && usdKrw < 3000 && Math.round(usdKrw) !== 1450) {
-    body.usdKrw = usdKrw;
-  }
 
   const res = await fetch(endpoint.toString(), {
     method: "POST",
@@ -782,18 +791,18 @@ function mergeWorkerQuoteData_(liveData = {}, closeData = null, meta = {}) {
   const domesticCloseErrors = Array.isArray(domesticCloseData?.errors) ? domesticCloseData.errors : [];
   const closeErrors = Array.isArray(closeData?.errors) ? closeData.errors : [];
 
-  const usdKrw = Number(
-    (meta.useDailyClose ? closeData?.usdKrw : liveData.usdKrw) ||
-    liveData.usdKrw ||
-    closeData?.usdKrw ||
-    0
-  );
+  const fxResponses = (meta.useDailyClose ? [closeData, liveData] : [liveData, closeData]).filter(Boolean);
+  const fxData = fxResponses.find(data => data.fxLookupSucceeded === true &&
+    Number(data.usdKrw) > 500 && Number(data.usdKrw) < 3000) || fxResponses[0] || {};
+  const usdKrw = Number(fxData.usdKrw || 0);
 
   return {
     ok: true,
     generatedAt: new Date().toISOString(),
     scope: meta.scope || liveData.scope || "all",
     usdKrw,
+    fxSource: fxData.fxSource,
+    fxLookupSucceeded: fxData.fxLookupSucceeded === true,
     quotes: {
       ...liveQuotes,
       ...domesticCloseQuotes,
@@ -1263,7 +1272,7 @@ function updateHoldingWithQuote(item, quotes, usdKrw) {
   const principal = avgPrice * quantity;
 
   let fxRate = currency === "USD"
-    ? Number(quote.fxRate || usdKrw || item.fxRate || 0)
+    ? Number(usdKrw || quote.fxRate || item.fxRate || 0)
     : 1;
 
   if (!fxRate) fxRate = Number(item.fxRate || 1);
@@ -2961,7 +2970,10 @@ function renderPriceBasisText() {
 
   const usLabel = formatHistoryShortDateLabelWithDay_(usDateKey);
   const usPhase = isUsRegularOpen ? `${usLabel} 장중현재가` : `${usLabel} 장마감가`;
-  return `국내 ${localPhase} / 미국 ${usPhase} 기준`;
+  const fxNote = state.data?.fxSource === "snapshot"
+    ? ` / 환율 ${state.data.fxBasisDate} 저장값`
+    : state.data?.fxSource === "fallback" ? " / 환율 고정 대체값" : "";
+  return `국내 ${localPhase} / 미국 ${usPhase} 기준${fxNote}`;
 }
 
 function isValidYmdKey_(key) {
