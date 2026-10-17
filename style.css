@@ -1085,6 +1085,12 @@ button {
   text-align: right;
 }
 
+.asset-all-holdings-card .asset-total-weight {
+  padding-bottom: 10px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--color-line);
+}
+
 .weight-detail-list {
   display: grid;
   grid-template-columns: 1fr;

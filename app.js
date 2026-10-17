@@ -2057,9 +2057,13 @@ function renderAssetTab() {
     카드 안 top-card-title 위치에 계좌명을 넣습니다.
   */
   const topHtml = renderPortfolioSummaryCard("", "asset-top-card");
+  const weightHtml = renderWeightBarLayout(
+    groupSmall(weightItemsFor("전체계좌").filter(i => Number(i.valueKrw || 0) > 0)),
+    buildSymbolColorMap()
+  );
   const allHoldingsHtml = renderAccountContentCard(
     "보유종목",
-    renderAssetAccountDetails("전체계좌"),
+    `<div class="asset-total-weight">${weightHtml}</div>${renderAssetAccountDetails("전체계좌")}`,
     0,
     "asset-all-holdings-card"
   );
