@@ -2269,13 +2269,18 @@ function renderWeightTab() {
     "account-weight-card"
   );
 
+  const renderWeightCard = (account, index) => renderAccountContentCard(
+    account,
+    renderWeightBarLayout(groupSmall(weightItemsFor(account).filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
+    index,
+    "weight-account-card"
+  );
+
   return `
     ${topHtml}
+    ${renderWeightCard("전체계좌", 0)}
     ${accountWeightHtml}
-    ${renderAllAccountContentCards(
-      account => renderWeightBarLayout(groupSmall(weightItemsFor(account).filter(i => Number(i.valueKrw || 0) > 0)), symbolColors),
-      "weight-account-card"
-    )}
+    ${accountNames().map((account, i) => renderWeightCard(account, i + 1)).join("")}
   `;
 }
 
