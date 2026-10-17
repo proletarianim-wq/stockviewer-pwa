@@ -371,7 +371,7 @@
   --asset-row-columns: 1fr 140px 90px;
   --asset-live-columns: 1fr 130px 115px;
   --watchlist-columns: minmax(0, 1fr) 80px 100px;
-  --cash-summary-columns: minmax(0, 1fr) minmax(235px, 2fr);
+  --cash-summary-columns: var(--asset-live-columns);
 
   /* 비중 */
   --account-weight-columns: 10px minmax(0, 1fr) 74px 42px 70px;
@@ -992,7 +992,7 @@ button {
 }
 
 .cash-summary-name {
-  white-space: nowrap;
+  min-width: 0;
 }
 
 .cash-summary-value {
@@ -1000,42 +1000,30 @@ button {
   text-align: right;
 }
 
-.cash-summary-top {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-}
-
-.cash-summary-bottom {
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
+.cash-summary-detail {
+  display: grid;
   gap: 4px;
   min-width: 0;
-  margin-top: 4px;
+  text-align: right;
+  color: var(--color-ui-muted);
   font-family: var(--font-15-family);
   font-size: var(--font-15-size);
   font-weight: var(--font-15-weight);
   letter-spacing: var(--font-15-letter-spacing);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .cash-detail {
   min-width: 0;
   color: var(--color-ui-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
-.cash-fx-label {
-  flex: 0 0 auto;
-  margin-left: 3px;
+.cash-summary-fx {
+  min-width: 0;
 }
 
-.cash-fx-value {
-  flex: 0 0 auto;
-  margin-left: -5px;
+.cash-summary-fx-value {
   color: var(--color-data-main);
 }
 

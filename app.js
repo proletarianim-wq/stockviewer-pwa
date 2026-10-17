@@ -523,11 +523,47 @@ async function fetchQuotesForBase_(base, addProgress, scope = "all") {
   }
 
   if (CONFIG.quoteApiUrl) {
-    return await fetchQuotesFromWorker_(base, scope, addProgress);
+    const quoteData = await fetchQuotesFromWorker_(base, scope, addProgress);
+    await refreshSnapshotFxIfNeeded_(base, quoteData, addProgress);
+    return quoteData;
   }
 
   // 임시 안전장치: quoteApiUrl이 없으면 기존 GAS 시세조회로 fallback.
   return await loadJsonpAction_("quotesCached", { scope });
+}
+
+async function refreshSnapshotFxIfNeeded_(base, quoteData, addProgress = null) {
+  // 미리 읽은 baseData에 환율이 없어도 KIS 실패 시 시트를 직접 다시 조회합니다.
+  if (resolveQuoteFx_({}, quoteData).fxSource === "kis") return;
+  addProgress?.("KIS 환율을 구하지 못해 구글시트의 최근 USD 환율을 조회하고 있습니다.");
+  try {
+    const data = await loadJsonpAction_("snapshotFx");
+    const rate = Number(data.snapshotFx?.rate);
+    const date = String(data.snapshotFx?.date || "");
+    if (!Number.isFinite(rate) || rate <= 500 || rate >= 3000 || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      throw new Error("스냅샷 환율 또는 기준일이 유효하지 않습니다.");
+    }
+    base.snapshotFx = { rate, date };
+    addProgress?.(`${date} 스냅샷 환율 ${rate.toLocaleString("ko-KR")}원을 사용합니다.`);
+    // 캐시 저장 실패가 방금 읽은 정상 환율의 적용을 막지 않도록 분리합니다.
+    try {
+      const cached = await idbGet_(LOCAL_DB.keys.baseData);
+      if (cached?.base) {
+        await idbSet_(LOCAL_DB.keys.baseData, {
+          ...cached,
+          base: { ...cached.base, snapshotFx: base.snapshotFx }
+        });
+      }
+    } catch (err) {
+      console.warn("스냅샷 환율 캐시 저장 실패", err);
+    }
+  } catch (err) {
+    console.warn("스냅샷 환율 직접 조회 실패", err);
+    const source = resolveQuoteFx_(base, quoteData).fxSource;
+    addProgress?.(source === "snapshot"
+      ? "시트 조회에 실패하여 기존에 확보한 스냅샷 환율을 사용합니다."
+      : "KIS와 스냅샷 환율을 모두 구하지 못해 마지막 수단으로 고정 대체값을 사용합니다.");
+  }
 }
 
 function normalizeThrottleMs_(value) {
@@ -2165,7 +2201,7 @@ function formatNumber(v) {
   return Math.round(Number(v || 0)).toLocaleString("ko-KR");
 }
 
-function renderCashSummaryRow(items, accountTotal = 0) {
+function renderCashSummaryRow(items, accountTotal = 0, fxContext = state.data) {
   if (!items.length) return "";
 
   const krw = items.find(i => i.symbol === "CASH_KRW");
@@ -2185,21 +2221,23 @@ function renderCashSummaryRow(items, accountTotal = 0) {
     usdAmount ? formatUsdCash(usdAmount) : ""
   ].filter(Boolean).join(" + ");
 
+  const fxLabel = fxContext?.fxSource === "fallback" ? "고정대체환율"
+    : fxContext?.fxSource === "snapshot" ? "저장환율" : "환율";
+  const fxDate = fxContext?.fxSource === "snapshot" && fxContext?.fxBasisDate
+    ? ` · ${String(fxContext.fxBasisDate).slice(5).replace("-", ".")}` : "";
+
   return `
     <div class="asset-row cash-summary-row">
       <div class="stock-name cash-summary-name">예수금(${formatPlainRate(cashRate)})</div>
 
-      <div class="cash-summary-value">
-        <div class="cash-summary-top">
-          <span class="asset-amount">${formatWon(cashTotal)}</span>
-        </div>
-        <div class="cash-summary-bottom">
+      <div class="cash-summary-detail">
           <span class="cash-detail">${detail}</span>
           ${fxRate ? `
-            <span class="asset-live-label cash-fx-label">환율</span>
-            <span class="cash-fx-value">${formatNumberFixed(fxRate, 1)}</span>
+            <span class="cash-summary-fx">${fxLabel} <span class="cash-summary-fx-value">${formatNumberFixed(fxRate, 1)}</span>${escapeHtml(fxDate)}</span>
           ` : ""}
-        </div>
+      </div>
+      <div class="cash-summary-value">
+        <span class="asset-amount">${formatWon(cashTotal)}</span>
       </div>
     </div>
   `;
@@ -2592,6 +2630,8 @@ function renderHistoricalAssetAccountContent(account) {
 }
 
 function renderHistoricalAssetAccountDetails(account) {
+  const detail = snapshotDetailOrEmpty_();
+  const fxContext = detail?.isLive ? state.data : { fxSource: "snapshot", fxBasisDate: detail?.date || "" };
   const items = historicalItemsFor_(account);
   const inv = investments(items);
   const cash = cashItems(items);
@@ -2603,7 +2643,7 @@ function renderHistoricalAssetAccountDetails(account) {
 
   return `
     ${inv.map(renderHistoricalAssetRow).join("")}
-    ${renderCashSummaryRow(cash, total)}
+    ${renderCashSummaryRow(cash, total, fxContext)}
   `;
 }
 function renderHistoricalAssetRow(item) {
@@ -2970,10 +3010,7 @@ function renderPriceBasisText() {
 
   const usLabel = formatHistoryShortDateLabelWithDay_(usDateKey);
   const usPhase = isUsRegularOpen ? `${usLabel} 장중현재가` : `${usLabel} 장마감가`;
-  const fxNote = state.data?.fxSource === "snapshot"
-    ? ` / 환율 ${state.data.fxBasisDate} 저장값`
-    : state.data?.fxSource === "fallback" ? " / 환율 고정 대체값" : "";
-  return `국내 ${localPhase} / 미국 ${usPhase} 기준${fxNote}`;
+  return `국내 ${localPhase} / 미국 ${usPhase} 기준`;
 }
 
 function isValidYmdKey_(key) {
