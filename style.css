@@ -84,8 +84,8 @@
   --account-chart-10: #BE123C;
 
   /* 종목별 고정 차트 색상 */
-  --symbol-chart-01: rgb(183,20,63);
-  --symbol-chart-02: rgb(251,152,58);
+  --symbol-chart-01: rgb(0,106,112);/*rgb(249,130,108);*/
+  --symbol-chart-02: rgb(249,130,108);/*rgb(183,20,63);*/
   --symbol-chart-03: rgb(74,105,188);
   --symbol-chart-04: rgb(31,55,153);
   --symbol-chart-05: rgb(8,153,146);
@@ -134,9 +134,82 @@
    0-2. FONT TOKENS
 ========================================================= */
 
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./assets/fonts/Paperlogy-1Thin.ttf") format("truetype");
+  font-weight: 100;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./assets/fonts/Paperlogy-2ExtraLight.ttf") format("truetype");
+  font-weight: 200;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./assets/fonts/Paperlogy-3Light.ttf") format("truetype");
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./assets/fonts/Paperlogy-4Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./assets/fonts/Paperlogy-5Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./assets/fonts/Paperlogy-6SemiBold.ttf") format("truetype");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./assets/fonts/Paperlogy-7Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./assets/fonts/Paperlogy-8ExtraBold.ttf") format("truetype");
+  font-weight: 800;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Paperlogy";
+  src: url("./assets/fonts/Paperlogy-9Black.ttf") format("truetype");
+  font-weight: 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   /* 기본 폰트 */
   --font-family-base:
+    "Paperlogy",
     "Pretendard Variable",
     "Pretendard",
     system-ui,
@@ -147,7 +220,7 @@
     "Malgun Gothic",
     sans-serif;
 
-  --font-family-number: "Roboto", "Pretendard Variable", "Pretendard", sans-serif;
+  --font-family-number: var(--font-family-base);
 
   /* FONT 01: 하단 네비게이션 - 일반 탭 */
   --font-01-family: var(--font-family-number);
@@ -180,14 +253,14 @@
   /* FONT 05: 총자산금액 */
   --font-05-family: var(--font-family-base);
   --font-05-size: 20px;
-  --font-05-weight: 900;
+  --font-05-weight: 600;
   --font-05-color: var(--color-data-main);
   --font-05-letter-spacing: -0.8px;
 
   /* FONT 06: 원금금액 */
   --font-06-family: var(--font-family-base);
   --font-06-size: 16px;
-  --font-06-weight: 900;
+  --font-06-weight: 600;
   --font-06-color: var(--color-ui-muted);
   --font-06-letter-spacing: -0.4px;
 
@@ -199,23 +272,23 @@
 
   /* FONT 08: 작은 라벨 - 원금 / 오늘 / 평가 / 계좌 / 평단 / 환 */
   --font-08-family: var(--font-family-base);
-  --font-08-size: 11px;
-  --font-08-weight: 500;
+  --font-08-size: 10px;
+  --font-08-weight: 400;
   --font-08-color: var(--color-ui-muted);
   --font-08-bg: var(--color-card-bg);
   --font-08-letter-spacing: 0px;
 
   /* FONT 11: 기본 종목명 */
   --font-11-family: var(--font-family-base);
-  --font-11-size: 14px;
-  --font-11-weight: 600;
+  --font-11-size: 13px;
+  --font-11-weight: 500;
   --font-11-color: var(--color-data-main);
   --font-11-letter-spacing: -0.4px;
 
   /* FONT 12: 현재가 */
   --font-12-family: var(--font-family-base);
-  --font-12-size: 15px;
-  --font-12-weight: 600;
+  --font-12-size: 13px;
+  --font-12-weight: 500;
   --font-12-color: var(--color-data-main);
   --font-12-letter-spacing: -0.6px;
 
@@ -248,8 +321,8 @@
 
   /* FONT 32: 자산 금액 */
   --font-32-family: var(--font-family-base);
-  --font-32-size: 15px;
-  --font-32-weight: 600;
+  --font-32-size: 13px;
+  --font-32-weight: 500;
   --font-32-color: var(--color-data-main);
   --font-32-letter-spacing: -0.6px;
 
@@ -261,14 +334,14 @@
 
   /* FONT 41: 비중 - 계좌/종목명 */
   --font-41-family: var(--font-family-number);
-  --font-41-size: 13px;
+  --font-41-size: 12px;
   --font-41-weight: 500;
   --font-41-color: var(--color-data-main);
   --font-41-letter-spacing: -0.5px;
 
   /* FONT 42: 비중 - 금액/비율 */
   --font-42-family: var(--font-family-number);
-  --font-42-size: 13px;
+  --font-42-size: 12px;
   --font-42-weight: 500;
   --font-42-color: var(--color-data-main);
   --font-42-letter-spacing: -0.6px;
@@ -309,15 +382,15 @@
 
   /* FONT 61: 관심종목 - 종목명 */
   --font-61-family: var(--font-family-base);
-  --font-61-size: 14px;
-  --font-61-weight: 600;
+  --font-61-size: 13px;
+  --font-61-weight: 500;
   --font-61-color: var(--color-data-main);
   --font-61-letter-spacing: -0.4px;
 
   /* FONT 62: 관심종목 - 현재가 */
   --font-62-family: var(--font-family-base);
-  --font-62-size: 14px;
-  --font-62-weight: 600;
+  --font-62-size: 13px;
+  --font-62-weight: 500;
   --font-62-color: var(--color-data-main);
   --font-62-letter-spacing: -0.6px;
 
