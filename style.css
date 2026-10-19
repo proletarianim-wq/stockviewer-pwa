@@ -246,7 +246,7 @@
   /* FONT 04: TOTAL PORTFOLIO / 그룹 제목 */
   --font-04-family: var(--font-family-base);
   --font-04-size: 13px;
-  --font-04-weight: 800;
+  --font-04-weight: 600;
   --font-04-color: var(--color-title-accent);
   --font-04-letter-spacing: -0.04em;
 
