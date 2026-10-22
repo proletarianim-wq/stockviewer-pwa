@@ -1888,7 +1888,7 @@ function renderPortfolioProfitColumn_(s, showPriceBasis = false, priceBasisText 
 function renderProfitList(s) {
   return `
     <div class="summary-profit-list">
-      ${profitRow(s.dayProfit, s.dayProfitRate, "오늘손익")}
+      ${profitRow(s.dayProfit, s.dayProfitRate, "오늘손익임시")}
       ${profitRow(s.evalProfit, s.evalProfitRate, "보유종목")}
       ${profitRow(s.accountProfit, s.accountProfitRate, "원금대비")}
     </div>
