@@ -1057,7 +1057,6 @@ function cash(account, symbol, name, currency, quantity, fxRate) {
 
 async function bootApp() {
   setupNav();
-  setupExitConfirmation_();
 
   /*
     개발 중에는 service worker를 꺼둡니다.
@@ -1086,86 +1085,6 @@ if (document.readyState === "loading") {
   bootApp();
 }
 
-function setupExitConfirmation_() {
-  if (window.__stockViewerExitConfirmationInstalled) return;
-  const key = "stockViewerExitGuard";
-  let leaving = false;
-  let exitDialog = null;
-  const arm = () => {
-    if (history.state?.[key] === "guard") return;
-    history.replaceState({ ...history.state, [key]: "base" }, "");
-    history.pushState({ ...history.state, [key]: "guard" }, "");
-  };
-
-  try {
-    arm();
-  } catch (err) {
-    console.warn("종료 확인을 위한 브라우저 기록 설정 실패", err);
-    return;
-  }
-  window.__stockViewerExitConfirmationInstalled = true;
-
-  window.addEventListener("popstate", event => {
-    if (leaving || event.state?.[key] !== "base") return;
-    // 커스텀 창은 비동기이므로 먼저 보호 기록을 복원합니다.
-    arm();
-    if (exitDialog) {
-      exitDialog.close("cancel");
-      return;
-    }
-    exitDialog = showExitConfirmation_(confirmed => {
-      exitDialog = null;
-      if (!confirmed) return;
-      leaving = true;
-      // 보호 기록과 앱 진입 기록을 지나 이전 화면으로 나갑니다.
-      history.go(-2);
-    });
-  });
-
-  window.addEventListener("pageshow", event => {
-    if (!event.persisted) return;
-    leaving = false;
-    if (exitDialog) exitDialog.close("cancel");
-    arm();
-  });
-}
-
-function showExitConfirmation_(onResult) {
-  const previousFocus = document.activeElement;
-  const dialog = document.createElement("dialog");
-  dialog.className = "exit-dialog";
-  dialog.setAttribute("aria-labelledby", "exit-dialog-title");
-  dialog.innerHTML = `
-    <h2 id="exit-dialog-title" class="exit-dialog-title">앱을 종료하시겠습니까?</h2>
-    <div class="exit-dialog-actions">
-      <button type="button" class="exit-dialog-cancel">취소</button>
-      <button type="button" class="exit-dialog-confirm">종료</button>
-    </div>
-  `;
-  dialog.querySelector(".exit-dialog-cancel").addEventListener("click", () => dialog.close("cancel"));
-  dialog.querySelector(".exit-dialog-confirm").addEventListener("click", () => dialog.close("exit"));
-  dialog.addEventListener("cancel", event => {
-    event.preventDefault();
-    dialog.close("cancel");
-  });
-  dialog.addEventListener("click", event => {
-    if (event.target !== dialog) return;
-    const rect = dialog.getBoundingClientRect();
-    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
-      dialog.close("cancel");
-    }
-  });
-  dialog.addEventListener("close", () => {
-    const confirmed = dialog.returnValue === "exit";
-    dialog.remove();
-    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
-    onResult(confirmed);
-  }, { once: true });
-  document.body.appendChild(dialog);
-  dialog.showModal();
-  dialog.querySelector(".exit-dialog-cancel").focus({ preventScroll: true });
-  return dialog;
-}
 
 async function registerServiceWorker() {
   if (!("serviceWorker" in navigator)) return;
