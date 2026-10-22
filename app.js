@@ -1090,6 +1090,7 @@ function setupExitConfirmation_() {
   if (window.__stockViewerExitConfirmationInstalled) return;
   const key = "stockViewerExitGuard";
   let leaving = false;
+  let exitDialog = null;
   const arm = () => {
     if (history.state?.[key] === "guard") return;
     history.replaceState({ ...history.state, [key]: "base" }, "");
@@ -1106,21 +1107,64 @@ function setupExitConfirmation_() {
 
   window.addEventListener("popstate", event => {
     if (leaving || event.state?.[key] !== "base") return;
-    if (window.confirm("앱을 종료하시겠습니까?")) {
-      leaving = true;
-      // 웹앱은 안드로이드 프로세스를 종료할 수 없으므로 이전 화면으로 나갑니다.
-      history.back();
-    } else {
-      // 취소 후 다시 뒤로가기를 눌러도 동일하게 확인합니다.
-      arm();
+    // 커스텀 창은 비동기이므로 먼저 보호 기록을 복원합니다.
+    arm();
+    if (exitDialog) {
+      exitDialog.close("cancel");
+      return;
     }
+    exitDialog = showExitConfirmation_(confirmed => {
+      exitDialog = null;
+      if (!confirmed) return;
+      leaving = true;
+      // 보호 기록과 앱 진입 기록을 지나 이전 화면으로 나갑니다.
+      history.go(-2);
+    });
   });
 
   window.addEventListener("pageshow", event => {
     if (!event.persisted) return;
     leaving = false;
+    if (exitDialog) exitDialog.close("cancel");
     arm();
   });
+}
+
+function showExitConfirmation_(onResult) {
+  const previousFocus = document.activeElement;
+  const dialog = document.createElement("dialog");
+  dialog.className = "exit-dialog";
+  dialog.setAttribute("aria-labelledby", "exit-dialog-title");
+  dialog.innerHTML = `
+    <h2 id="exit-dialog-title" class="exit-dialog-title">앱을 종료하시겠습니까?</h2>
+    <div class="exit-dialog-actions">
+      <button type="button" class="exit-dialog-cancel">취소</button>
+      <button type="button" class="exit-dialog-confirm">종료</button>
+    </div>
+  `;
+  dialog.querySelector(".exit-dialog-cancel").addEventListener("click", () => dialog.close("cancel"));
+  dialog.querySelector(".exit-dialog-confirm").addEventListener("click", () => dialog.close("exit"));
+  dialog.addEventListener("cancel", event => {
+    event.preventDefault();
+    dialog.close("cancel");
+  });
+  dialog.addEventListener("click", event => {
+    if (event.target !== dialog) return;
+    const rect = dialog.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+      dialog.close("cancel");
+    }
+  });
+  dialog.addEventListener("close", () => {
+    const confirmed = dialog.returnValue === "exit";
+    dialog.remove();
+    if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    onResult(confirmed);
+  }, { once: true });
+  document.body.appendChild(dialog);
+  dialog.showModal();
+  dialog.querySelector(".exit-dialog-cancel").focus({ preventScroll: true });
+  return dialog;
 }
 
 async function registerServiceWorker() {
@@ -1888,7 +1932,7 @@ function renderPortfolioProfitColumn_(s, showPriceBasis = false, priceBasisText 
 function renderProfitList(s) {
   return `
     <div class="summary-profit-list">
-      ${profitRow(s.dayProfit, s.dayProfitRate, "오늘손익임시")}
+      ${profitRow(s.dayProfit, s.dayProfitRate, "오늘손익임시2")}
       ${profitRow(s.evalProfit, s.evalProfitRate, "보유종목")}
       ${profitRow(s.accountProfit, s.accountProfitRate, "원금대비")}
     </div>
