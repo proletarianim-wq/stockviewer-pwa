@@ -683,6 +683,12 @@ button {
   margin-left: -6px;
 }
 
+.pill-label.principal-label-after {
+  margin-left: 3px;
+  padding-right: 0;
+  padding-left: 0;
+}
+
 .summary-profit-list {
   min-width: 172px;
   display: grid;

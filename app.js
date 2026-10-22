@@ -1828,7 +1828,7 @@ function renderPortfolioSummaryCard(extraHtml = "", className = "") {
       <div class="top-card-body">
         <div>
           <div class="amount-main">${formatWon(s.total)}</div>
-          <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+          <div class="principal-line">${formatWon(s.basis)}<span class="pill-label principal-label-after">원금</span></div>
         </div>
         ${renderPortfolioProfitColumn_(s, true)}
       </div>
@@ -1851,7 +1851,7 @@ function renderProfitList(s) {
   return `
     <div class="summary-profit-list">
       ${profitRow(s.dayProfit, s.dayProfitRate, "오늘손익")}
-      ${profitRow(s.evalProfit, s.evalProfitRate, "투자손익")}
+      ${profitRow(s.evalProfit, s.evalProfitRate, "보유종목")}
       ${profitRow(s.accountProfit, s.accountProfitRate, "원금대비")}
     </div>
   `;
@@ -2601,7 +2601,9 @@ function renderHistoricalPortfolioSummaryCard(account, extraHtml = "", className
       <div class="top-card-body">
         <div>
           <div class="amount-main">${formatWon(s.total)}</div>
-          <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+          <div class="principal-line">${isTotal
+            ? `${formatWon(s.basis)}<span class="pill-label principal-label-after">원금</span>`
+            : `<span class="pill-label">원금</span>${formatWon(s.basis)}`}</div>
         </div>
         ${isTotal
           ? renderPortfolioProfitColumn_(s, true, renderHistoricalPriceBasisText_(s))
@@ -3250,7 +3252,9 @@ function renderChartSummaryBody_(point, showPriceBasis = false) {
     <div class="top-card-body">
       <div>
         <div class="amount-main">${formatWon(s.total)}</div>
-        <div class="principal-line"><span class="pill-label">원금</span>${formatWon(s.basis)}</div>
+        <div class="principal-line">${showPriceBasis
+          ? `${formatWon(s.basis)}<span class="pill-label principal-label-after">원금</span>`
+          : `<span class="pill-label">원금</span>${formatWon(s.basis)}`}</div>
       </div>
       ${renderPortfolioProfitColumn_(s, showPriceBasis, renderTrendPriceBasisText_(point))}
     </div>
