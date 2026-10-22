@@ -1057,6 +1057,7 @@ function cash(account, symbol, name, currency, quantity, fxRate) {
 
 async function bootApp() {
   setupNav();
+  setupExitConfirmation_();
 
   /*
     개발 중에는 service worker를 꺼둡니다.
@@ -1083,6 +1084,43 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", bootApp);
 } else {
   bootApp();
+}
+
+function setupExitConfirmation_() {
+  if (window.__stockViewerExitConfirmationInstalled) return;
+  const key = "stockViewerExitGuard";
+  let leaving = false;
+  const arm = () => {
+    if (history.state?.[key] === "guard") return;
+    history.replaceState({ ...history.state, [key]: "base" }, "");
+    history.pushState({ ...history.state, [key]: "guard" }, "");
+  };
+
+  try {
+    arm();
+  } catch (err) {
+    console.warn("종료 확인을 위한 브라우저 기록 설정 실패", err);
+    return;
+  }
+  window.__stockViewerExitConfirmationInstalled = true;
+
+  window.addEventListener("popstate", event => {
+    if (leaving || event.state?.[key] !== "base") return;
+    if (window.confirm("앱을 종료하시겠습니까?")) {
+      leaving = true;
+      // 웹앱은 안드로이드 프로세스를 종료할 수 없으므로 이전 화면으로 나갑니다.
+      history.back();
+    } else {
+      // 취소 후 다시 뒤로가기를 눌러도 동일하게 확인합니다.
+      arm();
+    }
+  });
+
+  window.addEventListener("pageshow", event => {
+    if (!event.persisted) return;
+    leaving = false;
+    arm();
+  });
 }
 
 async function registerServiceWorker() {
